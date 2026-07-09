@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>hub</title>
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<header class="topbar">
+  <div class="topbar-row">
+    <span class="brand">hub</span>
+    <select id="projectSelect" class="project-select"></select>
+  </div>
+  <nav class="tabs" id="tabs">
+    <button data-tab="home" class="tab-btn">Home</button>
+    <button data-tab="gallery" class="tab-btn">Gallery</button>
+    <button data-tab="actions" class="tab-btn">Actions</button>
+    <button data-tab="jobs" class="tab-btn">Jobs</button>
+    <button data-tab="schedules" class="tab-btn">Schedules</button>
+    <button data-tab="wiring" class="tab-btn">Wiring</button>
+  </nav>
+</header>
+
+<main id="view"></main>
+
+<div id="lightbox" class="lightbox hidden"></div>
+<div id="toast" class="toast hidden"></div>
+
+<script type="module" src="/static/js/app.js"></script>
+</body>
+</html>

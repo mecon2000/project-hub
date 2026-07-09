@@ -1,0 +1,40 @@
+name: scratchpad
+label: "Scratchpad (hub smoke test)"
+content:
+  root: ~/.openclaw/workspace/shared/scratchpad
+  areas:
+    inputs:
+      dir: inputs
+      media: [photo, video]
+    outputs:
+      dir: outputs
+      media: [photo, video]
+    intermediates:
+      dir: intermediates
+      media: [photo]
+      hidden_by_default: true
+actions:
+  grayscale:
+    label: "Convert to grayscale"
+    script: ~/gitrep/project-hub/examples/grayscale.py
+    source_arg: "--source"
+    output_dir_arg: "--output-dir"
+    params:
+      strength:
+        type: float
+        min: 0.0
+        max: 1.0
+        default: 1.0
+        description: "Blend amount (0 = untouched, 1 = full grayscale)"
+      mode:
+        type: choice
+        options: [luma, average]
+        default: luma
+        flag: "--mode"
+        description: "Grayscale conversion mode"
+    flags:
+      "--keep-exif": "Preserve EXIF metadata"
+    replace_action_for: [inputs]
+    wall_time_estimate_sec: 5
+notify:
+  topic: hub-jobs
