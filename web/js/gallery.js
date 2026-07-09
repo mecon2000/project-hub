@@ -7,6 +7,7 @@ let offset = 0;
 let loading = false;
 let curArea = null;
 let onPick = null; // if set, in pick-mode for actions
+let updateChipCount = () => {};
 
 export function renderGallery(view, project, opts = {}) {
   onPick = opts.onPick || null;
@@ -29,16 +30,25 @@ export function renderGallery(view, project, opts = {}) {
   `;
 
   const chipRow = document.getElementById("areaChips");
+  const chips = {};
   function chipFor(a) {
-    const c = el(`<button class="chip ${a === curArea ? "active" : ""}">${a} (${project.areas[a].media.length || ""})</button>`);
+    const c = el(`<button class="chip ${a === curArea ? "active" : ""}">${a}</button>`);
+    chips[a] = c;
     c.addEventListener("click", () => {
       curArea = a;
+      document.querySelectorAll("#areaChips .chip").forEach((x) => x.classList.remove("active"));
+      c.classList.add("active");
       if (!onPick) setHash({ area: a });
       loadArea(project);
     });
+    // real file count, fetched lazily
+    api(`/api/p/${project.name}/media?area=${encodeURIComponent(a)}&offset=0&limit=1`)
+      .then((r) => { c.textContent = `${a} (${r.total})`; })
+      .catch(() => {});
     return c;
   }
   visible.forEach((a) => chipRow.appendChild(chipFor(a)));
+  updateChipCount = (a, n) => { if (chips[a]) chips[a].textContent = `${a} (${n})`; };
   if (hidden.length) {
     let expanded = false;
     const more = el(`<button class="chip more">more…</button>`);
@@ -77,6 +87,7 @@ async function loadMore(project) {
     renderGrid(project);
     const statusEl = document.getElementById("galStatus");
     if (statusEl) statusEl.textContent = `${items.length} of ${total}`;
+    updateChipCount(curArea, total);
     if (btn) btn.classList.toggle("hidden", offset >= total);
   } catch (e) { /* toasted */ } finally {
     loading = false;
@@ -190,6 +201,9 @@ function renderLightbox(project) {
       });
       items.splice(lbIndex, 1);
       total -= 1;
+      updateChipCount(curArea, total);
+      const statusEl = document.getElementById("galStatus");
+      if (statusEl) statusEl.textContent = `${items.length} of ${total}`;
       toast("Deleted");
       if (!items.length) { history.back(); renderGrid(project); return; }
       if (lbIndex >= items.length) lbIndex = items.length - 1;

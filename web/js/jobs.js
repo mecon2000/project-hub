@@ -24,7 +24,7 @@ async function refreshList() {
   try {
     jobs = await api(`/api/jobs${curProjectName ? `?project=${encodeURIComponent(curProjectName)}` : ""}`);
   } catch (e) { return; }
-  jobs.sort((a, b) => (b.started || "").localeCompare(a.started || ""));
+  jobs.sort((a, b) => (b.started || 0) - (a.started || 0));
   const list = document.getElementById("jobsList");
   if (!list) return;
   if (!jobs.length) { list.innerHTML = `<div class="empty">No jobs yet.</div>`; return; }
@@ -33,7 +33,7 @@ async function refreshList() {
     const icon = j.status === "running" ? "⟳" : j.status === "done" ? "✓" : "✗";
     const cls = j.status === "running" ? "status-running" : j.status === "done" ? "status-done" : "status-failed";
     const dur = j.started && j.finished
-      ? `${Math.max(0, Math.round((new Date(j.finished) - new Date(j.started)) / 1000))}s`
+      ? `${Math.max(0, Math.round(j.finished - j.started))}s`
       : "";
     const row = el(`<div class="job-row">
       <span class="status-icon ${cls}">${icon}</span>
