@@ -1,0 +1,7 @@
+# installed into ~/openclaw-venv (flask + pillow + requests already there via other projects)
+flask
+apscheduler
+SQLAlchemy          # APScheduler job store
+pillow
+pyyaml
+requests

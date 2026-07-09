@@ -1,0 +1,13 @@
+[Unit]
+Description=project-hub web UI
+After=network.target
+
+[Service]
+WorkingDirectory=/home/rong/gitrep/project-hub
+Environment=PATH=/home/rong/openclaw-venv/bin:/usr/local/bin:/usr/bin:/bin
+ExecStart=/home/rong/openclaw-venv/bin/python -m hub.app
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=default.target
