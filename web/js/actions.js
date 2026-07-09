@@ -130,8 +130,9 @@ function renderBody(project) {
       const inputEl = form.querySelector(`[name="${name}"]`);
       if (!inputEl) continue;
       let v = inputEl.value;
-      if (spec.type === "float") v = parseFloat(v);
-      else if (spec.type === "int") v = parseInt(v, 10);
+      if (v === "" || v == null) continue;   // unset optional param → omit entirely
+      if (spec.type === "float") { v = parseFloat(v); if (Number.isNaN(v)) continue; }
+      else if (spec.type === "int") { v = parseInt(v, 10); if (Number.isNaN(v)) continue; }
       paramValues[name] = v;
     }
     const chosenFlags = Array.from(form.querySelectorAll("[data-flag]"))

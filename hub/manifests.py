@@ -98,6 +98,10 @@ def _load_one(path: str) -> dict | None:
         act.setdefault("flags", {})
         if "script" in act:
             act["script"] = _expand(act["script"])
+        # registry tools pin their finals themselves; job-dir leftovers can be
+        # routed to a specific area via registry_output_area
+        if act.get("from_registry") and proj.get("registry_output_area"):
+            act.setdefault("output_area", proj["registry_output_area"])
     return proj
 
 

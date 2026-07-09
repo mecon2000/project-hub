@@ -38,6 +38,7 @@ def projects():
                              "cost_estimate_usd": av.get("cost_estimate_usd")}
                         for an, av in p.get("actions", {}).items()},
             "has_db_views": bool(p.get("db_views")),
+            "custom_view": p.get("custom_view"),
             "manifest_path": p.get("manifest_path"),
         })
     return jsonify(out)

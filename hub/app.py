@@ -3,6 +3,7 @@ from flask import Flask
 
 from hub import auth, manifests, scheduler
 from hub.config import HUB_PORT, HUB_ROOT, JOBS_DIR
+from hub.dbviews import bp as dbviews_bp
 from hub.media.routes import bp as media_bp
 from hub.views import bp as views_bp
 from hub import safepath
@@ -21,6 +22,12 @@ def create_app() -> Flask:
 
     app.register_blueprint(views_bp)
     app.register_blueprint(media_bp)
+    app.register_blueprint(dbviews_bp)
+    try:                                    # project-specific ext (plan-sanctioned exception)
+        from hub.ext.social_publisher import bp as sp_bp
+        app.register_blueprint(sp_bp)
+    except Exception as e:
+        print(f"[app] social-publisher ext not loaded: {e}")
     scheduler.start()
     return app
 

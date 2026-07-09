@@ -1,0 +1,73 @@
+name: photo-catalog
+label: "Photo catalog (130k photos)"
+db_views:
+  - name: catalog
+    label: "Catalog"
+    sqlite: ~/gitrep/photo-catalogging/data/photo-catalog.db
+    allow_raw_sql: true
+    free_text:
+      label: "Search tags/dimensions"
+      sql: >
+        SELECT DISTINCT m.name AS model, sess.date, s.photo_count, s.starred_count,
+               t.dimension, t.value, sess.location, sess.folder_path
+        FROM tags t
+        JOIN sets s ON s.id = t.set_id
+        JOIN sessions sess ON sess.id = s.session_id
+        JOIN models m ON m.id = sess.model_id
+        WHERE LOWER(t.value) LIKE :q OR LOWER(t.dimension) LIKE :q
+        ORDER BY sess.date DESC
+    canned_queries:
+      - name: models_summary
+        label: "Models by photo count"
+        sql: >
+          SELECT m.name AS model, m.consent_default,
+                 COUNT(DISTINCT sess.id) AS sessions,
+                 SUM(sess.photo_count) AS photos, SUM(sess.starred_count) AS starred
+          FROM models m
+          JOIN sessions sess ON sess.model_id = m.id
+          GROUP BY m.id ORDER BY photos DESC
+      - name: recent_sessions
+        label: "Recent sessions"
+        sql: >
+          SELECT sess.date, m.name AS model, sess.location, sess.location_type,
+                 sess.rigger, sess.photo_count, sess.starred_count, sess.folder_path
+          FROM sessions sess JOIN models m ON m.id = sess.model_id
+          ORDER BY sess.date DESC LIMIT 100
+      - name: model_search
+        label: "Find model (type name)"
+        sql: >
+          SELECT m.name AS model, m.consent_default, m.notes,
+                 sess.date, sess.location, sess.photo_count, sess.folder_path
+          FROM models m
+          JOIN sessions sess ON sess.model_id = m.id
+          WHERE LOWER(m.name) LIKE :q
+          ORDER BY sess.date DESC
+      - name: consent_overview
+        label: "Consent overview"
+        sql: >
+          SELECT m.consent_default, COUNT(*) AS models
+          FROM models m GROUP BY m.consent_default ORDER BY models DESC
+      - name: tag_dimensions
+        label: "Tag dimensions (what's searchable)"
+        sql: >
+          SELECT dimension, description, example_values FROM tag_dimensions ORDER BY dimension
+      - name: sets_by_tag
+        label: "Sets by tag (type tag value)"
+        sql: >
+          SELECT DISTINCT m.name AS model, sess.date, s.photo_count, s.starred_count,
+                 t.value AS tag, sess.folder_path
+          FROM tags t
+          JOIN sets s ON s.id = t.set_id
+          JOIN sessions sess ON sess.id = s.session_id
+          JOIN models m ON m.id = sess.model_id
+          WHERE LOWER(t.value) LIKE :q
+          ORDER BY sess.date DESC
+      - name: stats
+        label: "Collection stats"
+        sql: >
+          SELECT (SELECT COUNT(*) FROM photos) AS photos,
+                 (SELECT COUNT(*) FROM sessions) AS sessions,
+                 (SELECT COUNT(*) FROM models) AS models,
+                 (SELECT COUNT(*) FROM sets) AS sets,
+                 (SELECT COUNT(*) FROM tags) AS set_tags,
+                 (SELECT COUNT(*) FROM photo_tags) AS photo_tags

@@ -47,7 +47,8 @@ def _trim_segment(src: str, start: float, end: float, dest: str, log) -> str:
 def _job_env() -> dict:
     env = dict(os.environ)
     env["PATH"] = VENV_BIN + os.pathsep + env.get("PATH", "")   # ffmpeg via static_ffmpeg
-    env["HUB_JOB"] = "1"    # tools skip their own gallery-copy/phone-push under the hub
+    env["HUB_JOB"] = "1"        # tools skip their own gallery-copy/phone-push under the hub
+    env["NOTIFY_DISABLE"] = "1"  # legacy manipulating-photos tools: silence Pushbullet
     return env
 
 

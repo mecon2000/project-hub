@@ -2,6 +2,8 @@ import { renderGallery } from "./gallery.js";
 import { renderActions } from "./actions.js";
 import { renderJobs, openJobDetail } from "./jobs.js";
 import { renderSchedules } from "./scheduler.js";
+import { renderDb } from "./dbview.js";
+import { renderQueue } from "./queue.js";
 
 export const state = {
   projects: [],
@@ -112,6 +114,13 @@ function setActiveTab(tab) {
   });
 }
 
+function updateConditionalTabs(project) {
+  const dbBtn = document.querySelector('.tab-btn[data-tab="db"]');
+  const queueBtn = document.querySelector('.tab-btn[data-tab="queue"]');
+  if (dbBtn) dbBtn.classList.toggle("hidden", !(project && project.has_db_views));
+  if (queueBtn) queueBtn.classList.toggle("hidden", !(project && project.custom_view === "sp-queue"));
+}
+
 async function renderHome() {
   view.innerHTML = `<h2>Projects</h2><div class="card-grid" id="homeGrid"></div>`;
   const grid = document.getElementById("homeGrid");
@@ -183,6 +192,7 @@ async function route() {
   const sel = document.getElementById("projectSelect");
   if (sel && state.project) sel.value = state.project;
   setActiveTab(state.tab);
+  updateConditionalTabs(currentProject());
 
   if (state.tab === "home") return renderHome();
   if (state.tab === "gallery") return renderGallery(view, currentProject());
@@ -194,6 +204,8 @@ async function route() {
   }
   if (state.tab === "schedules") return renderSchedules(view, state.projects);
   if (state.tab === "wiring") return renderWiring();
+  if (state.tab === "db") return renderDb(view, currentProject());
+  if (state.tab === "queue") return renderQueue(view);
 }
 
 document.getElementById("tabs").addEventListener("click", (e) => {
