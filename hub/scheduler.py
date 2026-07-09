@@ -67,7 +67,10 @@ def start() -> None:
     global _sched
     if _sched:
         return
-    _sched = BackgroundScheduler()
+    # Generous misfire grace: WSL2 clocks drift/wake late, and APScheduler's
+    # 1s default silently skips the run ("misfire") — fire late instead, once.
+    _sched = BackgroundScheduler(job_defaults={"misfire_grace_time": 3600,
+                                               "coalesce": True})
     _sched.start()
     _sched.add_job(_purge_trash, CronTrigger.from_crontab("30 4 * * *"),
                    id="_purge_trash", replace_existing=True)

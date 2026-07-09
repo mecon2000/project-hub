@@ -25,7 +25,7 @@ export function renderGallery(view, project, opts = {}) {
     <div class="chip-row" id="areaChips"></div>
     <div class="gallery-status" id="galStatus"></div>
     <div class="gallery-grid" id="galGrid"></div>
-    <button class="load-more" id="loadMoreBtn">Load more</button>
+    <button class="load-more hidden" id="loadMoreBtn">Load more</button>
     ${onPick ? '<div class="btn-row"><button class="btn" id="pickDoneBtn">Use selected</button></div>' : ""}
   `;
 
@@ -77,8 +77,6 @@ async function loadArea(project) {
 async function loadMore(project) {
   if (loading || !curArea) return;
   loading = true;
-  const btn = document.getElementById("loadMoreBtn");
-  if (btn) btn.disabled = true;
   try {
     const res = await api(`/api/p/${project.name}/media?area=${encodeURIComponent(curArea)}&offset=${offset}&limit=${PAGE}`);
     total = res.total;
@@ -88,10 +86,11 @@ async function loadMore(project) {
     const statusEl = document.getElementById("galStatus");
     if (statusEl) statusEl.textContent = `${items.length} of ${total}`;
     updateChipCount(curArea, total);
-    if (btn) btn.classList.toggle("hidden", offset >= total);
   } catch (e) { /* toasted */ } finally {
     loading = false;
-    if (btn) btn.disabled = false;
+    // fresh lookup: a hashchange re-render may have replaced the button mid-fetch
+    const btn = document.getElementById("loadMoreBtn");
+    if (btn) btn.classList.toggle("hidden", offset >= total);
   }
 }
 
