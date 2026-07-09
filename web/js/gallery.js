@@ -1,4 +1,6 @@
 import { state, api, el, toast, humanSize, relTime, setHash } from "./app.js";
+import { attachVideo } from "./viewer.js";
+import { openCompare } from "./compare.js";
 
 const PAGE = 60;
 let items = [];
@@ -112,10 +114,36 @@ function renderGrid(project) {
         thumb.classList.toggle("selected");
       });
     } else {
-      thumb.addEventListener("click", () => openLightbox(project, idx));
+      thumb.addEventListener("click", () => {
+        if (comparePick) {
+          if (item.kind !== "video") { toast("Tap a video to compare"); return; }
+          const first = comparePick;
+          cancelComparePick();
+          openCompare(first.path, item.path, first.name, item.name);
+          return;
+        }
+        openLightbox(project, idx);
+      });
     }
     grid.appendChild(thumb);
   });
+}
+
+// ---- Compare pick mode ----
+let comparePick = null;
+let comparePickKeyHandler = null;
+
+function startComparePick(item) {
+  comparePick = item;
+  toast("Tap another video to compare");
+  comparePickKeyHandler = (e) => { if (e.key === "Escape") cancelComparePick(); };
+  document.addEventListener("keydown", comparePickKeyHandler);
+}
+
+function cancelComparePick() {
+  comparePick = null;
+  if (comparePickKeyHandler) document.removeEventListener("keydown", comparePickKeyHandler);
+  comparePickKeyHandler = null;
 }
 
 // ---- Lightbox ----
@@ -142,6 +170,8 @@ function openLightbox(project, idx) {
 function closeLightbox() {
   const lb = document.getElementById("lightbox");
   lb.classList.add("hidden");
+  const vv = lb.querySelector(".video-viewer");
+  if (vv && vv._stop) vv._stop();
   lb.innerHTML = "";
   if (lb._keyHandler) document.removeEventListener("keydown", lb._keyHandler);
 }
@@ -158,10 +188,6 @@ let touchStartX = null;
 function renderLightbox(project) {
   const item = items[lbIndex];
   const lb = document.getElementById("lightbox");
-  const mediaHtml =
-    item.kind === "video"
-      ? `<video src="/file?path=${encodeURIComponent(item.path)}" controls autoplay playsinline></video>`
-      : `<img src="/file?path=${encodeURIComponent(item.path)}">`;
   lb.innerHTML = `
     <div class="lightbox-top">
       <button class="lightbox-close" id="lbClose">✕</button>
@@ -169,16 +195,21 @@ function renderLightbox(project) {
     </div>
     <div class="lightbox-media">
       <button class="lightbox-nav prev" id="lbPrev">‹</button>
-      ${mediaHtml}
+      ${item.kind === "video" ? "" : `<img src="/file?path=${encodeURIComponent(item.path)}">`}
       <button class="lightbox-nav next" id="lbNext">›</button>
     </div>
     <div class="lightbox-info">${item.name} · ${humanSize(item.size)} · ${relTime(item.mtime)}</div>
     <div class="lightbox-actions">
       <button class="btn" id="lbRunAction">Run action…</button>
+      ${item.kind === "video" ? '<button class="btn secondary" id="lbCompare">Compare with…</button>' : ""}
       <button class="btn secondary" id="lbCopyPath">Copy path</button>
       <button class="btn danger" id="lbDelete">Delete</button>
     </div>
   `;
+  if (item.kind === "video") {
+    const media = lb.querySelector(".lightbox-media");
+    attachVideo(media, item.path, { autoplay: true });
+  }
   lb._keyHandler = lb._keyHandler; // keep reference
   document.getElementById("lbClose").addEventListener("click", () => history.back());
   document.getElementById("lbPrev").addEventListener("click", () => nav(project, -1));
@@ -187,6 +218,13 @@ function renderLightbox(project) {
     if (!state.selection.some((s) => s.path === item.path)) state.selection.push(item);
     setHash({ tab: "actions" });
   });
+  const cmpBtn = document.getElementById("lbCompare");
+  if (cmpBtn) {
+    cmpBtn.addEventListener("click", () => {
+      startComparePick(item);
+      history.back();
+    });
+  }
   document.getElementById("lbCopyPath").addEventListener("click", async () => {
     try { await navigator.clipboard.writeText(item.path); toast("Path copied"); }
     catch (e) { toast("Copy failed"); }

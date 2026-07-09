@@ -37,8 +37,8 @@ def _run_schedule(sid: str) -> None:
         return
     runner.start_job(
         s["project"], s["action"],
-        lambda out: actions_mod.build_argv(proj, s["action"], sources,
-                                           s.get("params", {}), s.get("flags", []), out),
+        lambda out, srcs: actions_mod.build_argv(proj, s["action"], srcs,
+                                                 s.get("params", {}), s.get("flags", []), out),
         sources)
 
 

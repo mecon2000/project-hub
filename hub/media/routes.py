@@ -8,7 +8,7 @@ from flask import Blueprint, Response, jsonify, request, send_file
 from hub import actions as actions_mod
 from hub import manifests, safepath
 from hub.jobs import runner, store, stream
-from hub.media import scanner, thumbs
+from hub.media import previews, scanner, thumbs
 
 bp = Blueprint("media", __name__)
 
@@ -103,6 +103,17 @@ def run_action(name, action_name):
     sources = body.get("sources", [])
     params = body.get("params", {})
     flags = body.get("flags", [])
+    segment = body.get("segment")
+    if segment is not None:
+        try:
+            start, end = float(segment["start"]), float(segment["end"])
+            if not (0 <= start < end):
+                raise ValueError
+            segment = {"start": start, "end": end}
+        except (KeyError, TypeError, ValueError):
+            return jsonify({"error": "segment must be {start, end} seconds, start < end"}), 400
+        if len(sources) != 1:
+            return jsonify({"error": "segment runs take exactly one source"}), 400
     try:
         # validate now (with a placeholder) so errors return 400, not a failed job
         actions_mod.build_argv(proj, action_name, sources, params, flags, "/tmp")
@@ -110,9 +121,24 @@ def run_action(name, action_name):
         return jsonify({"error": str(e)}), 400
     started = runner.start_job(
         name, action_name,
-        lambda out: actions_mod.build_argv(proj, action_name, sources, params, flags, out),
-        sources)
+        lambda out, srcs: actions_mod.build_argv(proj, action_name, srcs, params, flags, out),
+        sources, segment=segment)
     return jsonify({"job": started["id"]})
+
+
+@bp.get("/video-preview")
+def video_preview():
+    path = safepath.resolve_safe(request.args.get("path", ""))
+    if not path or not os.path.isfile(path):
+        return "forbidden", 403
+    status, result = previews.get_or_start(path)
+    if request.args.get("probe"):
+        return jsonify({"status": status, "error": result if status == "failed" else None}), 200
+    if status == "ready":
+        return send_file(result, conditional=True)
+    if status == "preparing":
+        return jsonify({"status": "preparing"}), 202
+    return jsonify({"status": "failed", "error": result}), 500
 
 
 @bp.get("/api/jobs")

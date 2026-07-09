@@ -1,4 +1,8 @@
 import { api, el, relTime, setHash } from "./app.js";
+import { attachVideo } from "./viewer.js";
+import { openCompare } from "./compare.js";
+
+const VIDEO_EXT = /\.(mp4|mov|mkv|webm|avi|m4v)$/i;
 
 let refreshTimer = null;
 let curProjectName = null;
@@ -54,16 +58,27 @@ export async function openJobDetail(view, jobId) {
   try { job = await api(`/api/jobs/${jobId}`); }
   catch (e) { detail.innerHTML = `<div class="card">Job not found.</div>`; return; }
 
+  const source0 = (job.sources || [])[0];
+  const firstVideoOutput = (job.outputs || []).find((p) => VIDEO_EXT.test(p));
+  const canCompare = source0 && VIDEO_EXT.test(source0) && firstVideoOutput;
+
   detail.innerHTML = `
     <div class="card">
       <h3>${job.project} · ${job.action} <span class="muted">(${job.status})</span></h3>
       <details><summary>argv</summary><div class="log-box">${(job.argv || []).join(" ")}</div></details>
       <div class="muted" style="margin-top:8px">started: ${relTime(job.started)} ${job.finished ? "· finished: " + relTime(job.finished) : ""}</div>
+      ${canCompare ? '<div class="btn-row"><button class="btn secondary" id="jobCompareBtn">Compare source ↔ output</button></div>' : ""}
       <h3 style="margin-top:14px">Log</h3>
       <div class="log-box" id="logBox"></div>
       <div id="outputsWrap"></div>
     </div>
   `;
+
+  if (canCompare) {
+    document.getElementById("jobCompareBtn").addEventListener("click", () => {
+      openCompare(source0, firstVideoOutput, "source", "censored");
+    });
+  }
 
   const logBox = document.getElementById("logBox");
   if (curES) { curES.close(); curES = null; }
@@ -116,10 +131,38 @@ function renderOutputs(job) {
   wrap.innerHTML = `<h3 style="margin-top:14px">Outputs</h3><div class="gallery-grid" id="outGrid"></div>`;
   const grid = document.getElementById("outGrid");
   for (const path of job.outputs) {
-    const thumb = el(`<div class="thumb"><img loading="lazy" src="/thumb?path=${encodeURIComponent(path)}"></div>`);
-    thumb.addEventListener("click", () => {
-      window.open(`/file?path=${encodeURIComponent(path)}`, "_blank");
-    });
+    const isVideo = VIDEO_EXT.test(path);
+    const thumb = el(`<div class="thumb">
+      <img loading="lazy" src="/thumb?path=${encodeURIComponent(path)}">
+      ${isVideo ? '<span class="badge">▶</span>' : ""}
+    </div>`);
+    thumb.addEventListener("click", () => openMediaOverlay(path, isVideo));
     grid.appendChild(thumb);
   }
+}
+
+function openMediaOverlay(path, isVideo) {
+  const overlay = el(`<div class="compare-overlay media-overlay">
+    <div class="compare-top">
+      <div class="muted"></div>
+      <button class="lightbox-close" id="movClose">✕</button>
+    </div>
+    <div class="media-overlay-body" id="movBody"></div>
+  </div>`);
+  document.body.appendChild(overlay);
+  const bodyEl = overlay.querySelector("#movBody");
+  let viewer = null;
+  if (isVideo) {
+    viewer = attachVideo(bodyEl, path, { autoplay: true });
+  } else {
+    bodyEl.appendChild(el(`<img src="/file?path=${encodeURIComponent(path)}">`));
+  }
+  function close() {
+    if (viewer && viewer.el._stop) viewer.el._stop();
+    document.removeEventListener("keydown", keyHandler);
+    overlay.remove();
+  }
+  function keyHandler(e) { if (e.key === "Escape") close(); }
+  document.addEventListener("keydown", keyHandler);
+  overlay.querySelector("#movClose").addEventListener("click", close);
 }

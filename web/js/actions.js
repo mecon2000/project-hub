@@ -1,7 +1,12 @@
 import { state, api, el, toast, setHash } from "./app.js";
 import { renderGallery } from "./gallery.js";
+import { attachVideo } from "./viewer.js";
+
+const VIDEO_EXT = /\.(mp4|mov|mkv|webm|avi|m4v)$/i;
 
 let curAction = null;
+let segment = { start: null, end: null };
+let segmentViewer = null;
 
 export function renderActions(view, project) {
   if (!project) {
@@ -25,9 +30,30 @@ export function renderActions(view, project) {
   renderBody(project);
 }
 
+function parseTimeStr(s) {
+  if (s == null) return null;
+  s = String(s).trim();
+  if (!s) return null;
+  const parts = s.split(":").map((p) => parseFloat(p));
+  if (parts.some((p) => isNaN(p))) return null;
+  let secs = 0;
+  for (const p of parts) secs = secs * 60 + p;
+  return secs;
+}
+
+function fmtTimeStr(s) {
+  if (s == null || !isFinite(s)) return "";
+  s = Math.max(0, s);
+  const m = Math.floor(s / 60);
+  const sec = Math.floor(s % 60);
+  return `${m}:${String(sec).padStart(2, "0")}`;
+}
+
 function renderBody(project) {
   const action = project.actions[curAction];
   const body = document.getElementById("actionBody");
+  segment = { start: null, end: null };
+  segmentViewer = null;
   if (!action) { body.innerHTML = `<div class="empty">No actions available.</div>`; return; }
 
   const estBits = [];
@@ -48,6 +74,9 @@ function renderBody(project) {
       <h3>Parameters</h3>
       <form id="paramsForm"></form>
       ${estBits.length ? `<div class="muted">Estimate: ${estBits.join(" · ")}</div>` : ""}
+    </div>
+    <div id="segmentCard"></div>
+    <div class="card">
       <div class="btn-row"><button class="btn" id="runBtn">Run</button></div>
     </div>
   `;
@@ -58,19 +87,29 @@ function renderBody(project) {
     card.classList.toggle("hidden");
     if (!card.classList.contains("hidden")) {
       renderGallery(card, project, {
-        onPick: () => { card.classList.add("hidden"); renderSourceChips(); },
+        onPick: () => { card.classList.add("hidden"); renderSourceChips(); renderSegmentSection(project, action); },
       });
     }
   });
   document.getElementById("clearSrcBtn").addEventListener("click", () => {
     state.selection = [];
     renderSourceChips();
+    renderSegmentSection(project, action);
   });
 
   const form = document.getElementById("paramsForm");
   const params = action.params || {};
-  for (const [name, spec] of Object.entries(params)) {
+  const commonEntries = Object.entries(params).filter(([, spec]) => !spec.advanced);
+  const advancedEntries = Object.entries(params).filter(([, spec]) => spec.advanced);
+  for (const [name, spec] of commonEntries) {
     form.appendChild(paramField(name, spec));
+  }
+  if (advancedEntries.length) {
+    const details = el(`<details class="advanced"><summary>Advanced</summary></details>`);
+    for (const [name, spec] of advancedEntries) {
+      details.appendChild(paramField(name, spec));
+    }
+    form.appendChild(details);
   }
   const flags = action.flags || {};
   if (Object.keys(flags).length) {
@@ -81,6 +120,8 @@ function renderBody(project) {
     }
     form.appendChild(flagWrap);
   }
+
+  renderSegmentSection(project, action);
 
   document.getElementById("runBtn").addEventListener("click", async (e) => {
     e.preventDefault();
@@ -101,17 +142,96 @@ function renderBody(project) {
       toast("Pick at least one source item");
       return;
     }
+    const hasSegment = action.supports_segment && sources.length === 1
+      && segment.start != null && segment.end != null && segment.end > segment.start;
+    const payload = { sources, params: paramValues, flags: chosenFlags };
+    if (hasSegment) payload.segment = { start: segment.start, end: segment.end };
     try {
       const res = await api(`/api/p/${project.name}/action/${curAction}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ sources, params: paramValues, flags: chosenFlags }),
+        body: JSON.stringify(payload),
       });
       toast(`Job started: ${res.job}`);
       state.selection = [];
       setHash({ tab: "jobs", job: res.job });
     } catch (err) { /* toasted */ }
   });
+}
+
+function updateRunBtnLabel() {
+  const btn = document.getElementById("runBtn");
+  if (!btn) return;
+  if (segment.start != null && segment.end != null && segment.end > segment.start) {
+    const dur = Math.round(segment.end - segment.start);
+    btn.textContent = `Run on segment (${dur}s)`;
+  } else {
+    btn.textContent = "Run";
+  }
+}
+
+function renderSegmentSection(project, action) {
+  const card = document.getElementById("segmentCard");
+  if (!card) return;
+  card.innerHTML = "";
+  segment = { start: null, end: null };
+  segmentViewer = null;
+  if (!action.supports_segment) return;
+  const videoSources = state.selection.filter((s) => s.kind === "video" || VIDEO_EXT.test(s.path));
+  if (videoSources.length !== 1) return;
+  const source = videoSources[0];
+
+  card.classList.add("card");
+  card.innerHTML = `
+    <h3>Test on a segment</h3>
+    <div id="segVideoWrap"></div>
+    <div class="segment-row">
+      <div class="segment-field">
+        <label>Start</label>
+        <input type="text" id="segStart" placeholder="mm:ss">
+        <button type="button" class="btn secondary" id="segSetStart">Set start</button>
+      </div>
+      <div class="segment-field">
+        <label>End</label>
+        <input type="text" id="segEnd" placeholder="mm:ss">
+        <button type="button" class="btn secondary" id="segSetEnd">Set end</button>
+      </div>
+    </div>
+    <a href="#" class="hint" id="segClear">Clear</a>
+  `;
+  const videoWrap = document.getElementById("segVideoWrap");
+  segmentViewer = attachVideo(videoWrap, source.path, { autoplay: false });
+
+  const startInput = document.getElementById("segStart");
+  const endInput = document.getElementById("segEnd");
+
+  function syncFromInputs() {
+    segment.start = parseTimeStr(startInput.value);
+    segment.end = parseTimeStr(endInput.value);
+    updateRunBtnLabel();
+  }
+  startInput.addEventListener("input", syncFromInputs);
+  endInput.addEventListener("input", syncFromInputs);
+
+  document.getElementById("segSetStart").addEventListener("click", () => {
+    const v = segmentViewer.getVideo();
+    if (!v) return;
+    startInput.value = fmtTimeStr(v.currentTime);
+    syncFromInputs();
+  });
+  document.getElementById("segSetEnd").addEventListener("click", () => {
+    const v = segmentViewer.getVideo();
+    if (!v) return;
+    endInput.value = fmtTimeStr(v.currentTime);
+    syncFromInputs();
+  });
+  document.getElementById("segClear").addEventListener("click", (e) => {
+    e.preventDefault();
+    startInput.value = "";
+    endInput.value = "";
+    syncFromInputs();
+  });
+  updateRunBtnLabel();
 }
 
 function renderSourceChips() {

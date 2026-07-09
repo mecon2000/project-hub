@@ -17,10 +17,37 @@ from hub.jobs import store
 
 MEDIA_EXT = {".jpg", ".jpeg", ".png", ".webp", ".gif", ".mp4", ".webm", ".mov", ".mkv", ".json"}
 
+# GPU-heavy actions declare serialize: true in their manifest — one at a time.
+_serial_locks: dict[str, threading.Lock] = {}
+_serial_guard = threading.Lock()
+
+
+def _serial_lock(project: str, action: str) -> threading.Lock:
+    key = f"{project}:{action}"
+    with _serial_guard:
+        return _serial_locks.setdefault(key, threading.Lock())
+
+
+def _trim_segment(src: str, start: float, end: float, dest: str, log) -> str:
+    """Precise re-encoded trim so the censor test hits the exact problem frames."""
+    ffmpeg = os.path.join(VENV_BIN, "ffmpeg")
+    dur = max(0.1, end - start)
+    log.write(f"[hub] trimming segment {start:.1f}s–{end:.1f}s "
+              f"({dur:.1f}s) from {os.path.basename(src)}\n")
+    log.flush()
+    cmd = [ffmpeg, "-v", "error", "-y", "-ss", str(start), "-i", src,
+           "-t", str(dur), "-c:v", "libx264", "-preset", "veryfast", "-crf", "18",
+           "-c:a", "copy", dest]
+    r = subprocess.run(cmd, stdout=log, stderr=log, timeout=1800)
+    if r.returncode != 0:
+        raise RuntimeError(f"segment trim failed (rc={r.returncode})")
+    return dest
+
 
 def _job_env() -> dict:
     env = dict(os.environ)
     env["PATH"] = VENV_BIN + os.pathsep + env.get("PATH", "")   # ffmpeg via static_ffmpeg
+    env["HUB_JOB"] = "1"    # tools skip their own gallery-copy/phone-push under the hub
     return env
 
 
@@ -60,29 +87,51 @@ def _collect_outputs(out_dir: str, project: dict, action: dict) -> list[str]:
 
 
 def start_job(project_name: str, action_name: str, argv_builder,
-              sources: list[str], cwd: str | None = None) -> dict:
-    """argv_builder(out_dir: str) -> list[str] — called after the job dir exists,
-    so scripts receive the real per-job output dir."""
+              sources: list[str], cwd: str | None = None,
+              segment: dict | None = None) -> dict:
+    """argv_builder(out_dir, sources) -> list[str] — called inside the job thread
+    after the job dir exists (and after any segment trim), so scripts receive the
+    real per-job output dir and the effective source paths."""
     job_id = time.strftime("%Y%m%d-%H%M%S") + "-" + uuid.uuid4().hex[:6]
     job_dir = JOBS_DIR / job_id
     out_dir = job_dir / "out"
     out_dir.mkdir(parents=True)
     log_path = str(job_dir / "log.txt")
-    argv = argv_builder(str(out_dir))
+
+    proj = manifests.get(project_name) or {}
+    serialize = bool(proj.get("actions", {}).get(action_name, {}).get("serialize"))
 
     job = {"id": job_id, "project": project_name, "action": action_name,
-           "argv": argv, "sources": sources, "status": "running",
-           "started": time.time(), "log_path": log_path}
+           "argv": argv_builder(str(out_dir), sources), "sources": sources,
+           "status": "running", "started": time.time(), "log_path": log_path}
     store.insert_job(job)
 
     def _run():
         rc = -1
         try:
             with open(log_path, "w", buffering=1) as log:
-                log.write("$ " + " ".join(argv) + "\n\n")
-                proc = subprocess.Popen(argv, stdout=log, stderr=subprocess.STDOUT,
-                                        cwd=cwd or str(job_dir), env=_job_env())
-                rc = proc.wait()
+                lock = _serial_lock(project_name, action_name) if serialize else None
+                if lock and not lock.acquire(blocking=False):
+                    log.write("[hub] waiting for an earlier job of this action "
+                              "to finish (GPU serialization)...\n")
+                    log.flush()
+                    lock.acquire()
+                try:
+                    eff_sources = list(sources)
+                    if segment and len(sources) == 1:
+                        clip = str(job_dir / "segment.mp4")
+                        _trim_segment(sources[0], float(segment["start"]),
+                                      float(segment["end"]), clip, log)
+                        eff_sources = [clip]
+                    argv = argv_builder(str(out_dir), eff_sources)
+                    log.write("$ " + " ".join(argv) + "\n\n")
+                    log.flush()
+                    proc = subprocess.Popen(argv, stdout=log, stderr=subprocess.STDOUT,
+                                            cwd=cwd or str(job_dir), env=_job_env())
+                    rc = proc.wait()
+                finally:
+                    if lock:
+                        lock.release()
         except Exception as e:
             with open(log_path, "a") as log:
                 log.write(f"\n[hub] runner error: {e}\n")

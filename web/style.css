@@ -151,3 +151,52 @@ button, input, select { font-family: inherit; font-size: 16px; }
 .muted { color: var(--muted); }
 h2 { margin-top: 0; }
 .empty { color: var(--muted); padding: 20px; text-align: center; }
+
+/* ---- Video viewer ---- */
+.video-viewer { position: relative; flex: 1; display: flex; align-items: center; justify-content: center; min-height: 0; width: 100%; }
+.video-viewer-media { display: flex; align-items: center; justify-content: center; width: 100%; height: 100%; }
+.video-viewer-media video { max-width: 100%; max-height: 100%; object-fit: contain; }
+.video-spinner-wrap { display: flex; flex-direction: column; align-items: center; gap: 10px; color: var(--muted); }
+.spinner {
+  width: 34px; height: 34px; border-radius: 50%;
+  border: 3px solid var(--border); border-top-color: var(--accent);
+  animation: spin 0.9s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+.video-note { text-align: center; padding: 6px 0; font-size: 12px; }
+.hd-toggle {
+  position: absolute; top: 8px; right: 8px; z-index: 2;
+  background: rgba(0,0,0,0.55); color: var(--text); border: 1px solid var(--border);
+  border-radius: 6px; padding: 6px 10px; font-size: 12px; font-weight: 600;
+}
+.hd-toggle.active { background: var(--accent); color: #041018; border-color: var(--accent); }
+
+/* ---- Segment picker (actions) ---- */
+.segment-row { display: flex; gap: 12px; flex-wrap: wrap; margin: 10px 0; }
+.segment-field { flex: 1; min-width: 140px; }
+.segment-field label { display: block; margin-bottom: 6px; color: var(--muted); font-size: 14px; }
+.segment-field input {
+  width: 100%; padding: 10px; border-radius: 8px; border: 1px solid var(--border);
+  background: #191919; color: var(--text); margin-bottom: 6px;
+}
+details.advanced { margin: 10px 0; }
+details.advanced summary { color: var(--muted); cursor: pointer; padding: 6px 0; }
+
+/* ---- Compare overlay ---- */
+.compare-overlay {
+  position: fixed; inset: 0; background: rgba(0,0,0,0.97); z-index: 150;
+  display: flex; flex-direction: column;
+}
+.compare-top { display: flex; justify-content: space-between; align-items: center; padding: 10px 14px; padding-top: calc(10px + env(safe-area-inset-top)); }
+.compare-row { position: relative; height: 40vh; display: flex; align-items: center; justify-content: center; overflow: hidden; border-bottom: 1px solid var(--border); }
+.compare-label {
+  position: absolute; top: 8px; left: 8px; z-index: 2;
+  background: rgba(0,0,0,0.55); color: var(--text); border-radius: 6px; padding: 4px 10px; font-size: 12px;
+}
+.compare-controls {
+  display: flex; align-items: center; gap: 10px; padding: 12px 14px;
+  padding-bottom: calc(12px + env(safe-area-inset-bottom)); flex-wrap: wrap;
+}
+.compare-controls input[type=range] { flex: 1; min-width: 100px; }
+.media-overlay-body { flex: 1; display: flex; align-items: center; justify-content: center; overflow: hidden; }
+.media-overlay-body img { max-width: 100%; max-height: 100%; object-fit: contain; }
