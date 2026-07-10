@@ -138,26 +138,28 @@ function renderCard(card, lane, laneIdx) {
   const c = el(`<div class="q-card" data-id="${card.id}">
     <div class="q-card-busy hidden"><div class="spinner"></div></div>
     <div class="q-card-body">
-      <div class="q-thumb">${img ? `<img src="${img.url}" loading="lazy">` : ""}</div>
-      <div class="q-content">
-        <div class="chip-row q-badges">
-          ${badge(card.type)}${badge(card.subtype)}${badge(card.model)}${card.consent ? badge("consent ✓") : ""}
+      <div class="q-top">
+        <div class="q-thumb">${img ? `<img src="${img.url}" loading="lazy">` : ""}</div>
+        <div class="q-content">
+          <div class="chip-row q-badges">
+            ${badge(card.type)}${badge(card.subtype)}${badge(card.model)}${card.consent ? badge("consent ✓") : ""}
+          </div>
+          ${handle ? `<div class="q-mention"><a href="https://www.instagram.com/${handle}/" target="_blank" rel="noopener">@${handle} ↗</a></div>` : ""}
+          ${card.look_for ? `<div class="q-lookfor">🔎 look for: ${card.look_for}</div>` : ""}
+          <div class="q-text" data-clamped>${text}</div>
+          ${hashtags ? `<div class="q-hashtags muted">${hashtags}</div>` : ""}
         </div>
-        ${handle ? `<div class="q-mention"><a href="https://www.instagram.com/${handle}/" target="_blank" rel="noopener">@${handle} ↗</a></div>` : ""}
-        ${card.look_for ? `<div class="q-lookfor">🔎 look for: ${card.look_for}</div>` : ""}
-        <div class="q-text" data-clamped>${text}</div>
-        ${hashtags ? `<div class="q-hashtags muted">${hashtags}</div>` : ""}
-        <div class="q-edit-row hidden">
-          <input type="text" class="q-edit-input" placeholder="what's wrong? e.g. make it punchier">
-          <button class="btn secondary q-fix-btn">Fix</button>
-        </div>
-        <div class="btn-row">
-          <button class="btn secondary q-copy-text">Copy text</button>
-          <button class="btn secondary q-copy-path">Copy path</button>
-          <button class="btn secondary q-edit-btn">Edit</button>
-          <button class="btn secondary q-posted-btn">Posted ✓</button>
-          <button class="btn danger q-remove-btn">Remove</button>
-        </div>
+      </div>
+      <div class="q-edit-row hidden">
+        <input type="text" class="q-edit-input" placeholder="what's wrong? e.g. make it punchier">
+        <button class="btn secondary q-fix-btn">Fix</button>
+      </div>
+      <div class="btn-row q-actions">
+        <button class="btn secondary q-copy-text">Copy text</button>
+        <button class="btn secondary q-copy-path">Copy path</button>
+        <button class="btn secondary q-edit-btn">Edit</button>
+        <button class="btn secondary q-posted-btn">Posted ✓</button>
+        <button class="btn danger q-remove-btn">Remove</button>
       </div>
     </div>
   </div>`);

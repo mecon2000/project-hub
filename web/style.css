@@ -246,7 +246,12 @@ table.db-table tbody tr:hover { background: rgba(255,255,255,0.03); }
   position: relative;
 }
 .q-card-busy { display: flex; align-items: center; justify-content: center; gap: 10px; padding: 30px 0; color: var(--muted); }
-.q-card-body { display: flex; gap: 10px; }
+.q-card-body { display: block; }
+.q-top { display: flex; gap: 10px; }
+.q-actions { justify-content: flex-start; }
+.q-actions .btn {
+  padding: 8px 12px; min-height: 36px; font-size: 0.85rem; flex: 0 1 auto;
+}
 .q-thumb {
   flex: 0 0 96px; width: 96px; height: 96px; border-radius: 6px; overflow: hidden;
   background: #1a1a1a;
