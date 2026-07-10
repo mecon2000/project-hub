@@ -1,9 +1,12 @@
 import { api, el, toast } from "./app.js";
 
 let lanes = [];
+let filter = { kind: null, subtype: null };   // persists across tab switches
 
 export async function renderQueue(view) {
-  view.innerHTML = `<h2>Queue</h2><div id="queueBody"><div class="muted">Loading…</div></div>`;
+  view.innerHTML = `<h2>Queue</h2>
+    <div class="chip-row" id="queueFilters"></div>
+    <div id="queueBody"><div class="muted">Loading…</div></div>`;
   const body = document.getElementById("queueBody");
   try {
     lanes = await api("/api/sp/queues");
@@ -15,19 +18,68 @@ export async function renderQueue(view) {
     body.innerHTML = `<div class="empty">No queues.</div>`;
     return;
   }
+  renderFilters();
+  renderBody();
+}
+
+function renderFilters() {
+  const bar = document.getElementById("queueFilters");
+  if (!bar) return;
+  bar.innerHTML = "";
+  const subCounts = new Map();
+  for (const lane of lanes) {
+    for (const card of lane.items || []) {
+      const s = card.subtype || card.type || "other";
+      subCounts.set(s, (subCounts.get(s) || 0) + 1);
+    }
+  }
+  const chip = (label, active, onTap) => {
+    const c = el(`<button class="chip ${active ? "active" : ""}">${label}</button>`);
+    c.addEventListener("click", () => { onTap(); renderFilters(); renderBody(); });
+    return c;
+  };
+  bar.appendChild(chip("all", !filter.kind && !filter.subtype,
+    () => { filter = { kind: null, subtype: null }; }));
+  for (const k of ["posts", "stories"]) {
+    bar.appendChild(chip(k, filter.kind === k,
+      () => { filter.kind = filter.kind === k ? null : k; }));
+  }
+  for (const [s, n] of [...subCounts.entries()].sort((a, b) => b[1] - a[1])) {
+    bar.appendChild(chip(`${s} (${n})`, filter.subtype === s,
+      () => { filter.subtype = filter.subtype === s ? null : s; }));
+  }
+}
+
+function cardMatches(card) {
+  if (filter.subtype && (card.subtype || card.type || "other") !== filter.subtype) return false;
+  return true;
+}
+
+function renderBody() {
+  const body = document.getElementById("queueBody");
+  if (!body) return;
   body.innerHTML = "";
-  lanes.forEach((lane, i) => body.appendChild(renderLane(lane, i)));
+  let shown = 0;
+  lanes.forEach((lane, i) => {
+    if (filter.kind && lane.kind !== filter.kind) return;
+    const visible = (lane.items || []).filter(cardMatches);
+    if (filter.subtype && !visible.length) return;
+    body.appendChild(renderLane(lane, i, visible));
+    shown++;
+  });
+  if (!shown) body.innerHTML = `<div class="empty">Nothing matches this filter.</div>`;
 }
 
 function laneKey(lane) {
   return `${lane.account}::${lane.kind}`;
 }
 
-function renderLane(lane, idx) {
+function renderLane(lane, idx, visibleItems) {
+  const items = visibleItems || lane.items || [];
   const sec = el(`<section class="lane" data-lane-idx="${idx}">
     <div class="lane-header">
       <span>${lane.label || lane.account}</span>
-      <span class="muted">(${(lane.items || []).length}/${lane.target ?? "?"})</span>
+      <span class="muted">(${(lane.items || []).length}/${lane.target ?? "?"}${items.length !== (lane.items || []).length ? `, showing ${items.length}` : ""})</span>
       <button class="chip lane-topup" title="add 2 auto items">+2</button>
     </div>
     <div class="lane-busy hidden"><div class="spinner"></div><span>removing + refilling…</span></div>
@@ -46,7 +98,7 @@ function renderLane(lane, idx) {
   const cardsEl = sec.querySelector(".lane-cards");
   // group cards by subtype (quote / lyric / found / shoutout / …) with sub-headers
   const groups = new Map();
-  (lane.items || []).forEach((card) => {
+  items.forEach((card) => {
     const key = card.subtype || card.type || "other";
     if (!groups.has(key)) groups.set(key, []);
     groups.get(key).push(card);
@@ -62,10 +114,8 @@ function renderLane(lane, idx) {
 
 function replaceLane(idx, newLane) {
   lanes[idx] = newLane;
-  const body = document.getElementById("queueBody");
-  const old = body.querySelector(`section.lane[data-lane-idx="${idx}"]`);
-  const fresh = renderLane(newLane, idx);
-  if (old) old.replaceWith(fresh);
+  renderFilters();   // counts changed
+  renderBody();      // re-applies the active filter
 }
 
 function setLaneBusy(idx, busy) {
