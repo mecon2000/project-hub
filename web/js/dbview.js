@@ -1,4 +1,4 @@
-import { api, el, toast } from "./app.js";
+import { api, el, toast, state, setHash } from "./app.js";
 
 let views = [];
 let curView = null;
@@ -134,12 +134,60 @@ async function runQuery(project, body) {
 function renderTable(resBox, r) {
   const cols = r.columns || [];
   const rows = r.rows || [];
-  const thead = `<thead><tr>${cols.map((c) => `<th>${c}</th>`).join("")}</tr></thead>`;
-  const tbody = `<tbody>${rows.map((row) =>
-    `<tr>${row.map((v) => `<td>${v == null ? "" : String(v)}</td>`).join("")}</tr>`
-  ).join("")}</tbody>`;
+  const pathIdx = cols.indexOf("_path");
+  const showCols = cols.filter((c) => c !== "_path");
+
+  if (pathIdx < 0) {
+    const thead = `<thead><tr>${cols.map((c) => `<th>${c}</th>`).join("")}</tr></thead>`;
+    const tbody = `<tbody>${rows.map((row) =>
+      `<tr>${row.map((v) => `<td>${v == null ? "" : String(v)}</td>`).join("")}</tr>`
+    ).join("")}</tbody>`;
+    resBox.innerHTML = `
+      <div class="muted db-count">${rows.length} row(s)${r.truncated ? " (truncated at 500)" : ""}</div>
+      <div class="db-table-wrap"><table class="db-table">${thead}${tbody}</table></div>
+    `;
+    return;
+  }
+
+  // photo-mapped results: thumbnail grid with selection → photo-tools actions
+  const mapped = rows.filter((row) => row[pathIdx]);
   resBox.innerHTML = `
-    <div class="muted db-count">${rows.length} row(s)${r.truncated ? " (truncated at 500)" : ""}</div>
-    <div class="db-table-wrap"><table class="db-table">${thead}${tbody}</table></div>
+    <div class="muted db-count">${rows.length} row(s), ${mapped.length} with photos on disk${r.truncated ? " (truncated at 500)" : ""}</div>
+    <div class="btn-row hidden" id="dbUseRow">
+      <button class="btn" id="dbUseSelected">Use selected in photo-tools →</button>
+      <span class="muted" id="dbSelCount"></span>
+    </div>
+    <div class="gallery-grid" id="dbGrid"></div>
   `;
+  const grid = document.getElementById("dbGrid");
+  const selected = new Map();
+  const useRow = document.getElementById("dbUseRow");
+  const selCount = document.getElementById("dbSelCount");
+
+  function syncSel() {
+    useRow.classList.toggle("hidden", selected.size === 0);
+    selCount.textContent = `${selected.size} selected`;
+  }
+
+  for (const row of mapped) {
+    const path = row[pathIdx];
+    const label = showCols.map((c, i) => row[cols.indexOf(c)]).slice(0, 2).join(" · ");
+    const cell = el(`<div class="thumb" title="${label}">
+      <img loading="lazy" src="/thumb?path=${encodeURIComponent(path)}">
+    </div>`);
+    cell.addEventListener("click", () => {
+      if (selected.has(path)) { selected.delete(path); cell.classList.remove("selected"); }
+      else { selected.set(path, row); cell.classList.add("selected"); }
+      syncSel();
+    });
+    grid.appendChild(cell);
+  }
+
+  document.getElementById("dbUseSelected").addEventListener("click", () => {
+    state.selection = Array.from(selected.keys()).map((p) => ({
+      name: p.split("/").pop(), path: p, kind: "photo",
+    }));
+    toast(`${state.selection.length} photo(s) selected — pick a tool`);
+    setHash({ p: "photo-tools", tab: "actions" });
+  });
 }

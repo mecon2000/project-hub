@@ -27,14 +27,25 @@ def _connect(view: dict) -> sqlite3.Connection:
 
 
 def _run(view: dict, sql: str, params: dict) -> dict:
+    mapped_view = view.get("file_mapping") == "photos_by_model_stem"
+    fetch = 2000 if mapped_view else ROW_LIMIT   # deep fetch: on-disk jpgs are sparse
     conn = _connect(view)
     try:
         cur = conn.execute(sql, params)
-        rows = cur.fetchmany(ROW_LIMIT)
+        rows = cur.fetchmany(fetch)
         columns = [d[0] for d in cur.description] if cur.description else []
-        return {"columns": columns,
-                "rows": [list(r) for r in rows],
-                "truncated": len(rows) == ROW_LIMIT}
+        rows = [list(r) for r in rows]
+        truncated = len(rows) == fetch
+        # map (model, filename) rows to on-disk processed jpgs; photos-first
+        if mapped_view and "model" in columns and "filename" in columns:
+            from hub import photo_index
+            mi, fi = columns.index("model"), columns.index("filename")
+            columns = columns + ["_path"]
+            for r in rows:
+                r.append(photo_index.resolve(r[mi], r[fi]))
+            rows.sort(key=lambda r: r[-1] is None)
+            rows = rows[:ROW_LIMIT]
+        return {"columns": columns, "rows": rows, "truncated": truncated}
     finally:
         conn.close()
 

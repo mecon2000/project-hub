@@ -5,6 +5,7 @@ db_views:
     label: "Catalog"
     sqlite: ~/gitrep/photo-catalogging/data/photo-catalog.db
     allow_raw_sql: true
+    file_mapping: photos_by_model_stem   # model+filename rows resolve to _photos/<Model>/**/<stem>.jpg
     free_text:
       label: "Search tags/dimensions"
       sql: >
@@ -62,6 +63,24 @@ db_views:
           JOIN models m ON m.id = sess.model_id
           WHERE LOWER(t.value) LIKE :q
           ORDER BY sess.date DESC
+      - name: photo_search
+        label: "Find photos by keyword (thumbnails)"
+        sql: >
+          SELECT m.name AS model, p.filename, p.lr_rating, p.lr_keywords, sess.date
+          FROM photos p
+          JOIN sessions sess ON sess.id = p.session_id
+          JOIN models m ON m.id = sess.model_id
+          WHERE LOWER(p.lr_keywords) LIKE :q
+          ORDER BY p.lr_rating DESC, sess.date DESC LIMIT 2000
+      - name: model_photos
+        label: "Photos of a model (type name, thumbnails)"
+        sql: >
+          SELECT m.name AS model, p.filename, p.lr_rating, sess.date
+          FROM photos p
+          JOIN sessions sess ON sess.id = p.session_id
+          JOIN models m ON m.id = sess.model_id
+          WHERE LOWER(m.name) LIKE :q
+          ORDER BY sess.date DESC, p.lr_rating DESC LIMIT 2000
       - name: stats
         label: "Collection stats"
         sql: >

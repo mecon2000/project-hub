@@ -14,6 +14,7 @@ def create_app() -> Flask:
     app = Flask(__name__, static_folder=str(HUB_ROOT / "web"), static_url_path="/static")
     auth.install(app)
     safepath.register_root(str(JOBS_DIR))
+    safepath.register_root("~/.openclaw/workspace/_photos")   # read-only source pool (thumbs + action sources)
     manifests.all_projects(force=True)          # fail fast on broken manifests at boot
 
     @app.get("/health")
