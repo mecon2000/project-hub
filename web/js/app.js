@@ -74,7 +74,7 @@ function parseHash() {
   const parts = new URLSearchParams(h.replace(/&/g, "&"));
   return {
     p: parts.get("p"),
-    tab: parts.get("tab") || "home",
+    tab: parts.get("tab"),   // null = no explicit tab; route() picks the project default
     area: parts.get("area"),
     job: parts.get("job"),
   };
@@ -190,7 +190,15 @@ async function route() {
   const h = parseHash();
   if (h.p) state.project = h.p;
   if (!state.project && state.projects.length) state.project = state.projects[0].name;
-  state.tab = h.job ? "jobs" : h.tab;
+  const proj = currentProject();
+  const defaultTab = proj && proj.custom_view === "sp-queue" ? "queue" : "home";
+  let tab = h.job ? "jobs" : (h.tab || defaultTab);
+  // never land on a tab this project doesn't have
+  if (tab === "gallery" && proj && !Object.keys(proj.areas || {}).length) tab = defaultTab;
+  if (tab === "actions" && proj && !Object.keys(proj.actions || {}).length) tab = defaultTab;
+  if (tab === "queue" && (!proj || proj.custom_view !== "sp-queue")) tab = "home";
+  if (tab === "db" && (!proj || !proj.has_db_views)) tab = "home";
+  state.tab = tab;
   state.area = h.area;
   state.job = h.job;
 

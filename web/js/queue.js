@@ -28,10 +28,21 @@ function renderLane(lane, idx) {
     <div class="lane-header">
       <span>${lane.label || lane.account}</span>
       <span class="muted">(${(lane.items || []).length}/${lane.target ?? "?"})</span>
+      <button class="chip lane-topup" title="add 2 auto items">+2</button>
     </div>
     <div class="lane-busy hidden"><div class="spinner"></div><span>removing + refilling…</span></div>
     <div class="lane-cards"></div>
   </section>`);
+  sec.querySelector(".lane-topup").addEventListener("click", async () => {
+    try {
+      const r = await api("/api/p/social-publisher/action/topup", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sources: [], flags: [],
+          params: { account: lane.account, kind: lane.kind, count: 2 } }),
+      });
+      toast(`Top-up job started (${lane.account} ${lane.kind}) — cards appear when it finishes; see Jobs (${r.job})`);
+    } catch (e) { /* toasted */ }
+  });
   const cardsEl = sec.querySelector(".lane-cards");
   // group cards by subtype (quote / lyric / found / shoutout / …) with sub-headers
   const groups = new Map();
