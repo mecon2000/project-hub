@@ -61,7 +61,7 @@ def _card(item: dict, data_path: str) -> dict:
         "consent": (item.get("consent_verified") or {}).get("rule"),
         "stickers": item.get("story_stickers", []), "poll_options": item.get("poll_options"),
         "prompt": item.get("prompt"), "countdown": item.get("countdown"),
-        "mention": item.get("mention"),
+        "mention": item.get("mention"), "look_for": item.get("look_for"),
         "images": [{"url": "/file?path=" + quote(p), "win": sp_config.win_path(p),
                     "name": Path(p).name}
                    for p in imgs if os.path.exists(p)],

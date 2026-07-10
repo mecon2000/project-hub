@@ -91,6 +91,15 @@ def list_jobs(project: str | None = None, limit: int = 50) -> list[dict]:
     return [_rowdict(r) for r in rows]
 
 
+def find_by_output(path: str) -> dict | None:
+    """Job whose recorded outputs include this file (provenance for favorites)."""
+    with _lock:
+        row = _db().execute(
+            "SELECT * FROM jobs WHERE outputs LIKE ? ORDER BY started DESC LIMIT 1",
+            (f'%"{path}"%',)).fetchone()
+    return _rowdict(row) if row else None
+
+
 def upsert_schedule(s: dict) -> None:
     with _lock:
         _db().execute(

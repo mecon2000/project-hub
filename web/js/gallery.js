@@ -201,6 +201,9 @@ function renderLightbox(project) {
     </div>
     <div class="lightbox-info">${item.name} · ${humanSize(item.size)} · ${relTime(item.mtime)}</div>
     <div class="lightbox-actions">
+      <button class="btn secondary" id="lbFav">${item.sidecar && item.sidecar.fav ? "★ Faved" : "☆ Fav"}</button>
+      <button class="btn secondary" id="lbGood">👍</button>
+      <button class="btn secondary" id="lbBad">👎</button>
       <button class="btn" id="lbRunAction">Run action…</button>
       ${item.kind === "video" ? '<button class="btn secondary" id="lbCompare">Compare with…</button>' : ""}
       <button class="btn secondary" id="lbToIG">→ IG…</button>
@@ -230,6 +233,22 @@ function renderLightbox(project) {
       history.back();
     });
   }
+  async function voteBtn(id, vote, patch, msg) {
+    document.getElementById(id).addEventListener("click", async () => {
+      try {
+        await api(`/api/p/${project.name}/vote`, {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ path: item.path, vote }),
+        });
+        item.sidecar = Object.assign(item.sidecar || {}, patch);
+        toast(msg);
+        renderLightbox(project);
+      } catch (e) { /* toasted */ }
+    });
+  }
+  voteBtn("lbFav", "fav", { fav: true }, "★ Copied to favorites (with reconstruction command)");
+  voteBtn("lbGood", "good", { vote: "good" }, "Voted 👍");
+  voteBtn("lbBad", "bad", { vote: "bad" }, "Voted 👎");
   document.getElementById("lbToIG").addEventListener("click", async () => {
     const menu = document.getElementById("lbIGMenu");
     if (!menu.classList.contains("hidden")) { menu.classList.add("hidden"); return; }

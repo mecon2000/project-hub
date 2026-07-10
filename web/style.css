@@ -228,6 +228,8 @@ table.db-table tbody tr:hover { background: rgba(255,255,255,0.03); }
   font-size: 1.05rem;
 }
 .badge-ig { left: 6px; right: auto; }
+.q-mention a { font-weight: 700; font-size: 1.05rem; color: var(--accent, #4da3ff); text-decoration: none; }
+.q-lookfor { color: var(--muted); font-style: italic; margin: 2px 0 4px; }
 .lightbox-ig-note { text-align: center; padding: 4px 0; }
 .lane-subheader {
   font-weight: 600; color: var(--muted); text-transform: capitalize;

@@ -84,6 +84,7 @@ function renderCard(card, lane, laneIdx) {
   const img = (card.images && card.images[0]) || null;
   const text = card.caption || card.story_text || card.quote || "";
   const hashtags = (card.hashtags || []).join(" ");
+  const handle = card.mention ? card.mention.replace(/^@/, "") : null;
   const c = el(`<div class="q-card" data-id="${card.id}">
     <div class="q-card-busy hidden"><div class="spinner"></div></div>
     <div class="q-card-body">
@@ -92,6 +93,8 @@ function renderCard(card, lane, laneIdx) {
         <div class="chip-row q-badges">
           ${badge(card.type)}${badge(card.subtype)}${badge(card.model)}${card.consent ? badge("consent ✓") : ""}
         </div>
+        ${handle ? `<div class="q-mention"><a href="https://www.instagram.com/${handle}/" target="_blank" rel="noopener">@${handle} ↗</a></div>` : ""}
+        ${card.look_for ? `<div class="q-lookfor">🔎 look for: ${card.look_for}</div>` : ""}
         <div class="q-text" data-clamped>${text}</div>
         ${hashtags ? `<div class="q-hashtags muted">${hashtags}</div>` : ""}
         <div class="q-edit-row hidden">
