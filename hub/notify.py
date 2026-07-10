@@ -37,6 +37,11 @@ def job_done(project_name: str, action_name: str, job_id: str,
     proj = manifests.get(project_name) or {}
     if proj.get("notify", {}).get("enabled", True) is False:
         return
+    action = proj.get("actions", {}).get(action_name, {})
+    # housekeeping ticks (dispatcher, topups, reports) speak for themselves when
+    # they have news — suppress their success pings, keep failure pings
+    if action.get("quiet") and status == "done":
+        return
     ok = status == "done"
     title = f"{proj.get('label', project_name)}: {action_name} {'✓' if ok else 'FAILED'}"
     n_media = len([o for o in outputs if os.path.splitext(o)[1].lower() != ".json"])
