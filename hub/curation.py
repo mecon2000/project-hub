@@ -98,13 +98,16 @@ def vote(name):
         if not model:
             return jsonify({"error": "blacklist-model needs a model name"}), 400
         try:
-            bl = json.loads(BLACKLIST_JSON.read_text()) if BLACKLIST_JSON.exists() \
-                and BLACKLIST_JSON.stat().st_size else []
+            data = json.loads(BLACKLIST_JSON.read_text()) if BLACKLIST_JSON.exists() \
+                and BLACKLIST_JSON.stat().st_size else {}
         except ValueError:
-            bl = []
+            data = {}
+        if not isinstance(data, dict):
+            data = {"models": data}
+        bl = data.setdefault("models", [])
         if model not in bl:
             bl.append(model)
-            BLACKLIST_JSON.write_text(json.dumps(bl, indent=2, ensure_ascii=False))
+            BLACKLIST_JSON.write_text(json.dumps(data, indent=2, ensure_ascii=False))
         return jsonify({"ok": True, "blacklisted": model})
     if not path or not os.path.isfile(path):
         return jsonify({"error": "bad path"}), 400

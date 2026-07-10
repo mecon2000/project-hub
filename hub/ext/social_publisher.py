@@ -151,6 +151,44 @@ def accounts():
                     if v.get("active") is not False])
 
 
+CONSENT_ALLOWLIST = Path(os.path.expanduser(
+    "~/.openclaw/workspace/shared/data/consent_allowlist.yaml"))
+BLACKLIST = Path(os.path.expanduser(
+    "~/.openclaw/workspace/shared/blacklisted_models.json"))
+
+
+def _consent_status(model: str) -> tuple[str, str | None, str | None]:
+    """-> (status, ig_rule, notes); status: blacklisted|confirmed|per_photo|unknown."""
+    if not model:
+        return "unknown", None, None
+    key = model.lower().strip()
+    try:
+        bl = json.loads(BLACKLIST.read_text()).get("models", []) if BLACKLIST.exists() \
+            and BLACKLIST.stat().st_size else []
+    except ValueError:
+        bl = []
+    for entry in bl:
+        if key in str(entry).lower():
+            return "blacklisted", None, str(entry)
+    try:
+        import yaml
+        models = yaml.safe_load(CONSENT_ALLOWLIST.read_text()).get("models", {})
+    except Exception:  # noqa: BLE001
+        return "unknown", None, "allowlist unreadable"
+    for name, m in models.items():
+        if name.lower().strip() == key:
+            rule = m.get("ig")
+            notes = m.get("constraints") or m.get("notes")
+            if not m.get("confirmed"):
+                return "unknown", rule, notes
+            if rule in ("no",):
+                return "blacklisted", rule, notes or "consent rule is 'no'"
+            if rule == "per_photo":
+                return "per_photo", rule, notes
+            return "confirmed", rule, notes
+    return "unknown", None, None
+
+
 def _guess_model(path: str) -> str:
     parts = Path(path).parts
     if "_photos" in parts:
@@ -184,6 +222,15 @@ def queue_image():
     if itype not in ("post", "story"):
         return jsonify({"error": "type must be post or story"}), 400
 
+    model = _guess_model(src)
+    status, rule, notes = _consent_status(model)
+    if status == "blacklisted":
+        return jsonify({"error": f"'{model}' is blacklisted / consent='no' — not queueing.",
+                        "notes": notes}), 403
+    if status in ("unknown", "per_photo") and not body.get("confirm"):
+        return jsonify({"needs_confirm": True, "model": model or "(unknown model)",
+                        "status": status, "rule": rule, "notes": notes}), 409
+
     kind = "posts" if itype == "post" else "stories"
     stamp = _time.strftime("%Y%m%d-%H%M%S")
     item_id = f"{stamp}-manual-{Path(src).stem[:24]}"
@@ -194,11 +241,13 @@ def queue_image():
 
     item = {
         "id": item_id, "account": account, "type": itype, "subtype": "manual",
-        "status": "queued", "model": _guess_model(src),
+        "status": "queued", "model": model,
         "caption": "", "hashtags": [],
         "image_paths": [str(dest_img)], "source_photos": [src],
-        "consent_verified": None,
-        "created_by": "hub queue-image (unreviewed — no consent/SFW gate run)",
+        "consent_verified": ({"rule": rule, "source": "allowlist via hub"}
+                             if status == "confirmed" else None),
+        "consent_note": notes if status in ("per_photo", "unknown") else None,
+        "created_by": f"hub queue-image (consent: {status})",
     }
     (folder / "data.json").write_text(json.dumps(item, indent=2, ensure_ascii=False))
 
@@ -216,6 +265,26 @@ def queue_image():
     Path(sidecar_path).write_text(json.dumps(sidecar, indent=2, ensure_ascii=False))
 
     return jsonify({"ok": True, "card": _card(item, str(folder / "data.json"))})
+
+
+@bp.post("/api/sp/posted")
+def posted():
+    """User confirms they published this item manually — status=posted + cadence record
+    (so posting caps and the weekly report count it exactly like dispatched items)."""
+    from src import cadence
+    d, p = _find((request.json or {}).get("id", ""))
+    if not d:
+        abort(404)
+    d["_path"] = str(p)
+    try:
+        cadence.record_dispatch(d)
+    except Exception as e:  # noqa: BLE001
+        pass
+    d.pop("_path", None)
+    d["status"] = "posted"
+    d["posted_at"] = __import__("time").strftime("%Y-%m-%d %H:%M:%S")
+    Path(p).write_text(json.dumps(d, indent=2, ensure_ascii=False))
+    return jsonify(_lane(d["account"], _kind_of(d)))
 
 
 @bp.post("/api/sp/send")

@@ -260,16 +260,25 @@ function renderLightbox(project) {
         const b = el(`<button class="chip">${acct} ${type}</button>`);
         b.addEventListener("click", async () => {
           menu.classList.add("hidden");
+          const post = async (confirmFlag) => fetch("/api/sp/queue-image", {
+            method: "POST", headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ path: item.path, account: acct, type, confirm: confirmFlag }),
+          });
           try {
-            await api("/api/sp/queue-image", {
-              method: "POST", headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ path: item.path, account: acct, type }),
-            });
+            let res = await post(false);
+            if (res.status === 409) {
+              const j = await res.json();
+              const msg = `⚠️ Consent check: ${j.model} is "${j.status}"` +
+                (j.notes ? `\n\n${j.notes}` : "") + `\n\nQueue anyway? (You are the gate.)`;
+              if (!confirm(msg)) return;
+              res = await post(true);
+            }
+            if (!res.ok) { const j = await res.json(); toast(j.error || "failed"); return; }
             item.sidecar = item.sidecar || {};
             (item.sidecar.queued_to_sp = item.sidecar.queued_to_sp || []).push({ account: acct, type });
             toast(`Queued as ${acct} ${type} — review + caption it in the Queue tab`);
             renderLightbox(project);
-          } catch (e) { /* toasted */ }
+          } catch (e) { toast("queue failed"); }
         });
         menu.appendChild(b);
       }

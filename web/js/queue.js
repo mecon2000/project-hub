@@ -113,6 +113,7 @@ function renderCard(card, lane, laneIdx) {
             </div>
           </span>
           <button class="btn secondary q-edit-btn">Edit</button>
+          <button class="btn secondary q-posted-btn">Posted ✓</button>
           <button class="btn danger q-remove-btn">Remove</button>
         </div>
       </div>
@@ -176,6 +177,21 @@ function renderCard(card, lane, laneIdx) {
       }
     } catch (e) { /* toast shown */ }
     setCardBusy(c, false);
+  });
+
+  c.querySelector(".q-posted-btn").addEventListener("click", async () => {
+    if (!confirm("Mark as posted? (counts toward cadence caps, leaves the queue)")) return;
+    setLaneBusy(laneIdx, true);
+    try {
+      const newLane = await api("/api/sp/posted", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: card.id }),
+      });
+      toast("Marked posted 🎉");
+      replaceLane(laneIdx, newLane);
+      return;
+    } catch (e) { /* toast shown */ }
+    setLaneBusy(laneIdx, false);
   });
 
   c.querySelector(".q-remove-btn").addEventListener("click", async () => {
