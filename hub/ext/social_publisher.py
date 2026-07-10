@@ -102,8 +102,24 @@ def _find(item_id: str):
     return None, None
 
 
+def _sweep_tombstones() -> None:
+    """Retry-delete folders of items tombstoned by a locked remove (cheap, best-effort)."""
+    for acct in sp_config.load_accounts().get("accounts", {}):
+        for kind in ("posts", "stories"):
+            base = sp_config.items_dir(acct, kind)
+            if not base.exists():
+                continue
+            for p in base.glob("*/data.json"):
+                try:
+                    if json.loads(p.read_text()).get("status") == "removed":
+                        shutil.rmtree(p.parent, ignore_errors=True)
+                except Exception:  # noqa: BLE001
+                    pass
+
+
 @bp.get("/api/sp/queues")
 def queues():
+    _sweep_tombstones()
     out = []
     for acct_name, acct in sp_config.load_accounts().get("accounts", {}).items():
         if acct.get("active") is False:
@@ -120,7 +136,16 @@ def remove():
         abort(404)
     account, kind = d["account"], _kind_of(d)
     refill.remember(account, d.get("source_photos", []))
-    shutil.rmtree(Path(p).parent, ignore_errors=True)
+    folder = Path(p).parent
+    shutil.rmtree(folder, ignore_errors=True)
+    if folder.exists():
+        # drvfs/9p lock (e.g. the card's image is being streamed) — tombstone the
+        # item so it stays out of the queue; cleanup retries happen on later loads
+        d["status"] = "removed"
+        try:
+            Path(p).write_text(json.dumps(d, indent=2, ensure_ascii=False))
+        except OSError:
+            pass
     try:
         refill.refill(account, kind)
     except Exception as e:  # noqa: BLE001

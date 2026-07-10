@@ -104,14 +104,6 @@ function renderCard(card, lane, laneIdx) {
         <div class="btn-row">
           <button class="btn secondary q-copy-text">Copy text</button>
           <button class="btn secondary q-copy-path">Copy path</button>
-          <span class="q-send-wrap">
-            <button class="btn secondary q-send-btn">Send ▾</button>
-            <div class="q-send-menu hidden">
-              <button data-to="Me">Me</button>
-              <button data-to="WQ">WQ</button>
-              <button data-to="Mishel">Mishel</button>
-            </div>
-          </span>
           <button class="btn secondary q-edit-btn">Edit</button>
           <button class="btn secondary q-posted-btn">Posted ✓</button>
           <button class="btn danger q-remove-btn">Remove</button>
@@ -133,23 +125,6 @@ function renderCard(card, lane, laneIdx) {
   c.querySelector(".q-copy-path").addEventListener("click", () => {
     navigator.clipboard.writeText(card.folder_win || "");
     toast("Copied path");
-  });
-
-  const sendBtn = c.querySelector(".q-send-btn");
-  const sendMenu = c.querySelector(".q-send-menu");
-  sendBtn.addEventListener("click", () => sendMenu.classList.toggle("hidden"));
-  sendMenu.querySelectorAll("button").forEach((b) => {
-    b.addEventListener("click", async () => {
-      sendMenu.classList.add("hidden");
-      try {
-        await api("/api/sp/send", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ id: card.id, to: b.dataset.to }),
-        });
-        toast("sent to phone");
-      } catch (e) { /* toast shown */ }
-    });
   });
 
   const editBtn = c.querySelector(".q-edit-btn");
