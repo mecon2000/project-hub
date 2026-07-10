@@ -145,6 +145,79 @@ def edit():
     return jsonify(_card(d, str(p)))
 
 
+@bp.get("/api/sp/accounts")
+def accounts():
+    return jsonify([a for a, v in sp_config.load_accounts().get("accounts", {}).items()
+                    if v.get("active") is not False])
+
+
+def _guess_model(path: str) -> str:
+    parts = Path(path).parts
+    if "_photos" in parts:
+        return parts[parts.index("_photos") + 1]
+    stem = Path(path).stem
+    if "__" in stem:
+        first = stem.split("__")[0].replace("_", " ").strip()
+        if first and not first[0].isdigit():
+            return first
+    return ""
+
+
+@bp.post("/api/sp/queue-image")
+def queue_image():
+    """Hand-queue a photo from any hub gallery as a post/story item.
+
+    Bypasses the /ig-queue consent+SFW gate on purpose — the created card has NO
+    consent badge and an empty caption, so it visibly demands review in the Queue
+    tab before the user posts it. Source photo gets a queued_to_sp sidecar tag."""
+    from hub import safepath
+    import time as _time
+
+    body = request.json or {}
+    src = safepath.resolve_safe(body.get("path", ""))
+    account = body.get("account", "")
+    itype = body.get("type", "post")
+    if not src or not os.path.isfile(src):
+        return jsonify({"error": "bad path"}), 400
+    if account not in sp_config.load_accounts().get("accounts", {}):
+        return jsonify({"error": f"unknown account {account!r}"}), 400
+    if itype not in ("post", "story"):
+        return jsonify({"error": "type must be post or story"}), 400
+
+    kind = "posts" if itype == "post" else "stories"
+    stamp = _time.strftime("%Y%m%d-%H%M%S")
+    item_id = f"{stamp}-manual-{Path(src).stem[:24]}"
+    folder = sp_config.items_dir(account, kind) / f"manual__{stamp}__{Path(src).stem[:40]}"
+    folder.mkdir(parents=True, exist_ok=True)
+    dest_img = folder / Path(src).name
+    shutil.copyfile(src, dest_img)
+
+    item = {
+        "id": item_id, "account": account, "type": itype, "subtype": "manual",
+        "status": "queued", "model": _guess_model(src),
+        "caption": "", "hashtags": [],
+        "image_paths": [str(dest_img)], "source_photos": [src],
+        "consent_verified": None,
+        "created_by": "hub queue-image (unreviewed — no consent/SFW gate run)",
+    }
+    (folder / "data.json").write_text(json.dumps(item, indent=2, ensure_ascii=False))
+
+    # tag the source photo's sidecar (tag, don't move — provenance stays intact)
+    sidecar_path = src + ".json"
+    alt = os.path.splitext(src)[0] + ".json"
+    if os.path.isfile(alt) and not os.path.isfile(sidecar_path):
+        sidecar_path = alt
+    try:
+        sidecar = json.loads(Path(sidecar_path).read_text()) if os.path.isfile(sidecar_path) else {}
+    except ValueError:
+        sidecar = {}
+    sidecar.setdefault("queued_to_sp", []).append(
+        {"account": account, "type": itype, "date": stamp, "item_id": item_id})
+    Path(sidecar_path).write_text(json.dumps(sidecar, indent=2, ensure_ascii=False))
+
+    return jsonify({"ok": True, "card": _card(item, str(folder / "data.json"))})
+
+
 @bp.post("/api/sp/send")
 def send():
     """Send to phone — via ntfy now (Pushbullet retired for this flow)."""

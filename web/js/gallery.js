@@ -103,6 +103,7 @@ function renderGrid(project) {
     const thumb = el(`<div class="thumb">
       <img loading="lazy" src="/thumb?path=${encodeURIComponent(item.path)}">
       ${item.kind === "video" ? '<span class="badge">▶</span>' : ""}
+      ${item.sidecar && item.sidecar.queued_to_sp ? '<span class="badge badge-ig" title="queued to social publisher">📤</span>' : ""}
     </div>`);
     if (onPick) {
       const selected = state.selection.some((s) => s.path === item.path);
@@ -202,9 +203,13 @@ function renderLightbox(project) {
     <div class="lightbox-actions">
       <button class="btn" id="lbRunAction">Run action…</button>
       ${item.kind === "video" ? '<button class="btn secondary" id="lbCompare">Compare with…</button>' : ""}
+      <button class="btn secondary" id="lbToIG">→ IG…</button>
       <button class="btn secondary" id="lbCopyPath">Copy path</button>
       <button class="btn danger" id="lbDelete">Delete</button>
     </div>
+    <div class="chip-row hidden" id="lbIGMenu"></div>
+    ${item.sidecar && item.sidecar.queued_to_sp
+      ? `<div class="muted lightbox-ig-note">📤 queued to IG: ${item.sidecar.queued_to_sp.map((q) => `${q.account} ${q.type}`).join(", ")}</div>` : ""}
   `;
   if (item.kind === "video") {
     const media = lb.querySelector(".lightbox-media");
@@ -225,6 +230,33 @@ function renderLightbox(project) {
       history.back();
     });
   }
+  document.getElementById("lbToIG").addEventListener("click", async () => {
+    const menu = document.getElementById("lbIGMenu");
+    if (!menu.classList.contains("hidden")) { menu.classList.add("hidden"); return; }
+    menu.innerHTML = "";
+    let accounts = [];
+    try { accounts = await api("/api/sp/accounts"); } catch (e) { return; }
+    for (const acct of accounts) {
+      for (const type of ["post", "story"]) {
+        const b = el(`<button class="chip">${acct} ${type}</button>`);
+        b.addEventListener("click", async () => {
+          menu.classList.add("hidden");
+          try {
+            await api("/api/sp/queue-image", {
+              method: "POST", headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ path: item.path, account: acct, type }),
+            });
+            item.sidecar = item.sidecar || {};
+            (item.sidecar.queued_to_sp = item.sidecar.queued_to_sp || []).push({ account: acct, type });
+            toast(`Queued as ${acct} ${type} — review + caption it in the Queue tab`);
+            renderLightbox(project);
+          } catch (e) { /* toasted */ }
+        });
+        menu.appendChild(b);
+      }
+    }
+    menu.classList.remove("hidden");
+  });
   document.getElementById("lbCopyPath").addEventListener("click", async () => {
     try { await navigator.clipboard.writeText(item.path); toast("Path copied"); }
     catch (e) { toast("Copy failed"); }
