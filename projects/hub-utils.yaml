@@ -1,0 +1,11 @@
+name: hub-utils
+label: "Hub utilities"
+actions:
+  remind:
+    label: "One-shot reminder (ntfy note, schedule self-destructs)"
+    script: ~/gitrep/project-hub/tools/remind.py
+    params:
+      title: {type: str, default: "⏰ Reminder", flag: "--title"}
+      message: {type: str, flag: "--message"}
+      self-destruct-label: {type: str, flag: "--self-destruct-label", advanced: true}
+    wall_time_estimate_sec: 5
