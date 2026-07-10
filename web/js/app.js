@@ -115,10 +115,15 @@ function setActiveTab(tab) {
 }
 
 function updateConditionalTabs(project) {
-  const dbBtn = document.querySelector('.tab-btn[data-tab="db"]');
-  const queueBtn = document.querySelector('.tab-btn[data-tab="queue"]');
-  if (dbBtn) dbBtn.classList.toggle("hidden", !(project && project.has_db_views));
-  if (queueBtn) queueBtn.classList.toggle("hidden", !(project && project.custom_view === "sp-queue"));
+  const show = (tab, on) => {
+    const btn = document.querySelector(`.tab-btn[data-tab="${tab}"]`);
+    if (btn) btn.classList.toggle("hidden", !on);
+  };
+  show("db", project && project.has_db_views);
+  show("queue", project && project.custom_view === "sp-queue");
+  // projects without listed areas / actions don't get dead tabs
+  show("gallery", project && Object.keys(project.areas || {}).length > 0);
+  show("actions", project && Object.keys(project.actions || {}).length > 0);
 }
 
 async function renderHome() {

@@ -22,8 +22,10 @@ def list_area(project: dict, area_name: str, offset: int = 0, limit: int = 60) -
     wanted = set(area.get("media", ["photo", "video"]))
     items = []
     base = area["abs_dir"]
+    trash = project.get("trash_dir")
     for root, dirs, files in os.walk(base):
-        dirs[:] = [d for d in dirs if not d.startswith((".", "_"))]
+        dirs[:] = [d for d in dirs if not d.startswith((".", "_")) and d != "trash"
+                   and (not trash or os.path.join(root, d) != trash)]
         for f in files:
             path = os.path.join(root, f)
             kind = kind_of(path)

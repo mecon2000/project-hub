@@ -33,7 +33,19 @@ function renderLane(lane, idx) {
     <div class="lane-cards"></div>
   </section>`);
   const cardsEl = sec.querySelector(".lane-cards");
-  (lane.items || []).forEach((card) => cardsEl.appendChild(renderCard(card, lane, idx)));
+  // group cards by subtype (quote / lyric / found / shoutout / …) with sub-headers
+  const groups = new Map();
+  (lane.items || []).forEach((card) => {
+    const key = card.subtype || card.type || "other";
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(card);
+  });
+  for (const [sub, cards] of groups) {
+    if (groups.size > 1) {
+      cardsEl.appendChild(el(`<div class="lane-subheader">${sub} <span class="muted">(${cards.length})</span></div>`));
+    }
+    cards.forEach((card) => cardsEl.appendChild(renderCard(card, lane, idx)));
+  }
   return sec;
 }
 

@@ -29,7 +29,8 @@ def projects():
             "label": p.get("label", name),
             "areas": {a: {"media": v.get("media", []),
                           "hidden": v.get("hidden_by_default", False)}
-                      for a, v in p.get("content", {}).get("areas", {}).items()},
+                      for a, v in p.get("content", {}).get("areas", {}).items()
+                      if v.get("listed", True)},
             "actions": {an: {"label": av.get("label", an),
                              "params": av.get("params", {}),
                              "flags": av.get("flags", {}),
