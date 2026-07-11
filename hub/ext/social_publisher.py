@@ -129,13 +129,82 @@ def queues():
     return jsonify(out)
 
 
+REMOVE_REASONS = {
+    "nsfw":             "Too NSFW for IG",
+    "no_consent_photo": "No consent for THIS photo",
+    "block_model":      "Don't post this model at all",
+    "bad_photo":        "Weak photo (unflattering/boring)",
+    "bad_crop":         "Bad crop (photo itself is fine)",
+    "bad_caption":      "Bad caption/idea (photo itself is fine)",
+    "other":            "Other / just don't want it",
+}
+FEEDBACK_LOG = Path(os.path.expanduser(
+    "~/.openclaw/workspace/shared/social-publisher/_state/removal_feedback.jsonl"))
+
+
+def _log_feedback(d: dict, reason: str) -> None:
+    import time as _t
+    FEEDBACK_LOG.parent.mkdir(parents=True, exist_ok=True)
+    rec = {"date": _t.strftime("%Y-%m-%d %H:%M:%S"), "id": d.get("id"),
+           "model": d.get("model"), "reason": reason,
+           "sources": d.get("source_photos", [])}
+    with open(FEEDBACK_LOG, "a") as f:
+        f.write(json.dumps(rec, ensure_ascii=False) + "\n")
+
+
+def _apply_removal_reason(d: dict, reason: str) -> tuple[bool, str]:
+    """Feed the reason back into consent/DB state. Returns (burn_photo, note)."""
+    from src import consent as sp_consent
+    model = d.get("model")
+    srcs = d.get("source_photos", [])
+    if reason in ("nsfw", "no_consent_photo") and model and srcs:
+        label = "too NSFW for IG" if reason == "nsfw" else "no consent for this photo"
+        for s in srcs:
+            sp_consent.set_photo_consent(model, s, approved=False,
+                                         notes=f"{label} (queue removal)",
+                                         source="hub queue removal")
+        return True, f"photo rejected in allowlist ({label})"
+    if reason == "block_model" and model:
+        sp_consent.set_consent(model, "no", source="hub queue removal",
+                               notes="blocked via queue removal")
+        return True, f"model '{model}' set to ig: no — leaving the pool"
+    if reason in ("bad_crop", "bad_caption"):
+        return False, "photo NOT burned — it may return with a different crop/caption"
+    return True, ""
+
+
 @bp.post("/api/sp/remove")
 def remove():
-    d, p = _find((request.json or {}).get("id", ""))
+    body = request.json or {}
+    d, p = _find(body.get("id", ""))
     if not d:
         abort(404)
     account, kind = d["account"], _kind_of(d)
-    refill.remember(account, d.get("source_photos", []))
+    reason = body.get("reason") or "other"
+    burn, note = _apply_removal_reason(d, reason)
+    _log_feedback(d, reason)
+    if burn:
+        refill.remember(account, d.get("source_photos", []))
+    extra_removed = 0
+    if reason == "block_model" and d.get("model"):
+        # purge every other queued card of this model, burning their sources
+        for acct in sp_config.load_accounts().get("accounts", {}):
+            for k in ("posts", "stories"):
+                base = sp_config.items_dir(acct, k)
+                if not base.exists():
+                    continue
+                for dp in base.glob("*/data.json"):
+                    try:
+                        it = json.loads(dp.read_text())
+                    except Exception:  # noqa: BLE001
+                        continue
+                    if it.get("model") == d["model"] and it.get("id") != d["id"] \
+                            and it.get("status", "queued") == "queued":
+                        refill.remember(acct, it.get("source_photos", []))
+                        shutil.rmtree(dp.parent, ignore_errors=True)
+                        extra_removed += 1
+        if extra_removed:
+            note += f"; {extra_removed} more queued card(s) of this model removed"
     folder = Path(p).parent
     shutil.rmtree(folder, ignore_errors=True)
     if folder.exists():
@@ -149,8 +218,14 @@ def remove():
     try:
         refill.refill(account, kind)
     except Exception as e:  # noqa: BLE001
-        return jsonify({**_lane(account, kind), "warning": f"refill failed: {e}"})
-    return jsonify(_lane(account, kind))
+        return jsonify({**_lane(account, kind), "warning": f"refill failed: {e}",
+                        **({"note": note} if note else {})})
+    return jsonify({**_lane(account, kind), **({"note": note} if note else {})})
+
+
+@bp.get("/api/sp/remove-reasons")
+def remove_reasons():
+    return jsonify(REMOVE_REASONS)
 
 
 @bp.post("/api/sp/edit")

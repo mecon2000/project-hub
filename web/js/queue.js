@@ -236,19 +236,41 @@ function renderCard(card, lane, laneIdx) {
   });
 
   c.querySelector(".q-remove-btn").addEventListener("click", async () => {
-    if (!confirm("Remove this item?")) return;
-    setLaneBusy(laneIdx, true);
-    try {
-      const newLane = await api("/api/sp/remove", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id: card.id }),
+    let reasons = {};
+    try { reasons = await api("/api/sp/remove-reasons"); } catch (e) { return; }
+    const overlay = el(`<div class="lightbox reason-picker">
+      <div class="lightbox-top">
+        <span class="muted">Why remove? (teaches the system)</span>
+        <button class="lightbox-close">✕</button>
+      </div>
+      <div class="reason-list"></div>
+    </div>`);
+    document.body.appendChild(overlay);
+    overlay.querySelector(".lightbox-close").addEventListener("click", () => overlay.remove());
+    const list = overlay.querySelector(".reason-list");
+    for (const [key, label] of Object.entries(reasons)) {
+      const b = el(`<button class="btn secondary reason-btn">${label}</button>`);
+      b.addEventListener("click", async () => {
+        overlay.remove();
+        if (key === "bad_crop" && !confirm("Tip: the Crop button re-cuts this card from the original. Remove anyway?")) return;
+        if (key === "bad_caption" && !confirm("Tip: the Edit button rewrites the caption. Remove anyway?")) return;
+        if (key === "block_model" && !confirm(`Block ${card.model || "this model"} from ALL posting and purge their queued cards?`)) return;
+        setLaneBusy(laneIdx, true);
+        try {
+          const newLane = await api("/api/sp/remove", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ id: card.id, reason: key }),
+          });
+          if (newLane.warning) toast(newLane.warning);
+          if (newLane.note) toast(newLane.note, 5000);
+          replaceLane(laneIdx, newLane);
+          return;
+        } catch (e) { /* toast shown */ }
+        setLaneBusy(laneIdx, false);
       });
-      if (newLane.warning) toast(newLane.warning);
-      replaceLane(laneIdx, newLane);
-      return;
-    } catch (e) { /* toast shown */ }
-    setLaneBusy(laneIdx, false);
+      list.appendChild(b);
+    }
   });
 
   return c;
