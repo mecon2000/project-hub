@@ -462,14 +462,17 @@ def queue_image():
         "consent_note": notes if status in ("per_photo", "unknown") else None,
         "created_by": f"hub queue-image (consent: {status})",
     }
-    # rediscovery camera-JPEG finds: mark the card as needing a proper LR edit —
-    # the dispatcher skips it, and "Re-pull export" swaps in the export once made
+    # rediscovery finds: anchor the card to the ARCHIVE original (the inbox copy
+    # gets trashed after triage); camera-JPEGs additionally get the needs-edit flow
     for sc_p in (src + ".json", os.path.splitext(src)[0] + ".json"):
         if os.path.isfile(sc_p):
             try:
                 src_sc = json.loads(Path(sc_p).read_text())
             except ValueError:
                 break
+            if src_sc.get("original_path"):
+                item["source_photos"] = [src_sc["original_path"]]
+                item["queued_from"] = src
             if str(src_sc.get("source_kind", "")).startswith("camera_jpeg"):
                 item["needs_editing"] = True
                 item["archive_raw"] = src_sc.get("original_path")

@@ -28,12 +28,14 @@ def projects():
             "name": name,
             "label": p.get("label", name),
             "areas": {a: {"media": v.get("media", []),
-                          "hidden": v.get("hidden_by_default", False)}
+                          "hidden": v.get("hidden_by_default", False),
+                          "triage": v.get("triage", False)}
                       for a, v in p.get("content", {}).get("areas", {}).items()
                       if v.get("listed", True)},
             "actions": {an: {"label": av.get("label", an),
                              "params": av.get("params", {}),
                              "flags": av.get("flags", {}),
+                             "takes_sources": bool(av.get("source_arg")),
                              "supports_segment": av.get("supports_segment", False),
                              "wall_time_estimate_sec": av.get("wall_time_estimate_sec"),
                              "cost_estimate_usd": av.get("cost_estimate_usd")}

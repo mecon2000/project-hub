@@ -130,6 +130,34 @@ function renderGrid(project) {
   });
 }
 
+function hasSourceActions(project) {
+  return Object.values((project && project.actions) || {}).some((a) => a.takes_sources);
+}
+
+function inTriageArea(project) {
+  const area = project && project.areas && project.areas[curArea];
+  return !!(area && area.triage);
+}
+
+function removeCurrentItem(project, toastMsg) {
+  // shared by Delete and triage auto-clear (→IG / Fav): trash + advance
+  return api(`/api/p/${project.name}/delete`, {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ path: items[lbIndex].path }),
+  }).then(() => {
+    items.splice(lbIndex, 1);
+    total -= 1;
+    updateChipCount(curArea, total);
+    const statusEl = document.getElementById("galStatus");
+    if (statusEl) statusEl.textContent = `${items.length} of ${total}`;
+    if (toastMsg) toast(toastMsg);
+    if (!items.length) { history.back(); renderGrid(project); return; }
+    if (lbIndex >= items.length) lbIndex = items.length - 1;
+    renderGrid(project);
+    renderLightbox(project);
+  });
+}
+
 function sidecarInfoHtml(item) {
   const sc = item.sidecar;
   if (!sc) return "";
@@ -221,9 +249,7 @@ function renderLightbox(project) {
     ${sidecarInfoHtml(item)}
     <div class="lightbox-actions">
       <button class="btn secondary" id="lbFav">${item.sidecar && item.sidecar.fav ? "★ Faved" : "☆ Fav"}</button>
-      <button class="btn secondary" id="lbGood">👍</button>
-      <button class="btn secondary" id="lbBad">👎</button>
-      <button class="btn" id="lbRunAction">Run action…</button>
+      <button class="btn" id="lbRunAction">${hasSourceActions(project) ? "Run action…" : "Run tool…"}</button>
       ${item.kind === "video" ? '<button class="btn secondary" id="lbCompare">Compare with…</button>' : ""}
       <button class="btn secondary" id="lbToIG">→ IG…</button>
       ${item.sidecar && item.sidecar.catalog_photo_id ? '<button class="btn secondary" id="lbFixData">Fix data…</button>' : ""}
@@ -245,7 +271,8 @@ function renderLightbox(project) {
   document.getElementById("lbNext").addEventListener("click", () => nav(project, 1));
   document.getElementById("lbRunAction").addEventListener("click", () => {
     if (!state.selection.some((s) => s.path === item.path)) state.selection.push(item);
-    setHash({ tab: "actions" });
+    if (hasSourceActions(project)) setHash({ tab: "actions" });
+    else setHash({ p: "photo-tools", tab: "actions" });   // this project has no per-photo tools
   });
   const cmpBtn = document.getElementById("lbCompare");
   if (cmpBtn) {
@@ -313,14 +340,16 @@ function renderLightbox(project) {
           body: JSON.stringify({ path: item.path, vote }),
         });
         item.sidecar = Object.assign(item.sidecar || {}, patch);
+        if (vote === "fav" && inTriageArea(project)) {
+          removeCurrentItem(project, msg + " — cleared from inbox");
+          return;
+        }
         toast(msg);
         renderLightbox(project);
       } catch (e) { /* toasted */ }
     });
   }
   voteBtn("lbFav", "fav", { fav: true }, "★ Copied to favorites (with reconstruction command)");
-  voteBtn("lbGood", "good", { vote: "good" }, "Voted 👍");
-  voteBtn("lbBad", "bad", { vote: "bad" }, "Voted 👎");
   document.getElementById("lbToIG").addEventListener("click", async () => {
     const menu = document.getElementById("lbIGMenu");
     if (!menu.classList.contains("hidden")) { menu.classList.add("hidden"); return; }
@@ -348,6 +377,10 @@ function renderLightbox(project) {
             if (!res.ok) { const j = await res.json(); toast(j.error || "failed"); return; }
             item.sidecar = item.sidecar || {};
             (item.sidecar.queued_to_sp = item.sidecar.queued_to_sp || []).push({ account: acct, type });
+            if (inTriageArea(project)) {
+              removeCurrentItem(project, `Queued as ${acct} ${type} ✓ — cleared from inbox`);
+              return;
+            }
             toast(`Queued as ${acct} ${type} — review + caption it in the Queue tab`);
             renderLightbox(project);
           } catch (e) { toast("queue failed"); }
@@ -363,22 +396,7 @@ function renderLightbox(project) {
   });
   document.getElementById("lbDelete").addEventListener("click", async () => {
     if (!confirm(`Delete ${item.name}? This moves it to trash.`)) return;
-    try {
-      await api(`/api/p/${project.name}/delete`, {
-        method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ path: item.path }),
-      });
-      items.splice(lbIndex, 1);
-      total -= 1;
-      updateChipCount(curArea, total);
-      const statusEl = document.getElementById("galStatus");
-      if (statusEl) statusEl.textContent = `${items.length} of ${total}`;
-      toast("Deleted");
-      if (!items.length) { history.back(); renderGrid(project); return; }
-      if (lbIndex >= items.length) lbIndex = items.length - 1;
-      renderGrid(project);
-      renderLightbox(project);
-    } catch (e) { /* toasted */ }
+    removeCurrentItem(project, "Deleted").catch(() => {});
   });
 
   const media = lb.querySelector(".lightbox-media");

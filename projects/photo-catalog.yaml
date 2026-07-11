@@ -6,6 +6,7 @@ content:
     inbox:
       dir: inbox
       media: [photo]
+      triage: true   # →IG / Fav decisions clear the item from this gallery
 actions:
   mine:
     label: "Mine the archive (rediscovery batch → inbox)"

@@ -57,10 +57,19 @@ def _fav(project: dict, path: str) -> dict:
     shutil.copyfile(src, FAVORITES_DIR / fav_name)   # copyfile: drvfs rejects copy2 metadata
 
     job = store.find_by_output(path)
+    sidecar = {}
+    for sc in (path + ".json", os.path.splitext(path)[0] + ".json"):
+        if os.path.isfile(sc):
+            try:
+                sidecar = json.loads(Path(sc).read_text())
+            except ValueError:
+                pass
+            break
     entry = {
         "file": fav_name,
-        "source": (job or {}).get("sources", [None])[0] if job else None,
-        "model": None,
+        "source": ((job.get("sources") or [None])[0] if job else None)
+                  or sidecar.get("original_path"),
+        "model": sidecar.get("model"),
         "style": None,
         "tool": (job or {}).get("action"),
         "score": None,
@@ -71,7 +80,7 @@ def _fav(project: dict, path: str) -> dict:
         "project": project.get("name"),
     }
     stem = src.stem
-    if "__" in stem and not stem.split("__")[0][:1].isdigit():
+    if not entry["model"] and "__" in stem and not stem.split("__")[0][:1].isdigit():
         entry["model"] = stem.split("__")[0].replace("_", " ").strip()
     try:
         data = json.loads(FAVORITES_JSON.read_text()) if FAVORITES_JSON.exists() else {"favorites": []}
