@@ -51,6 +51,45 @@ def _tag(conn, table: str, key_col: str, key_val: int, value: str) -> None:
             " VALUES (?, 'boldness', ?, 'user_triage')", (key_val, value))
 
 
+@bp.get("/api/catalog/status")
+def status():
+    """Current DB + allowlist truth for a mined photo — shown before corrections."""
+    path = safepath.resolve_safe(request.args.get("path", ""))
+    sc, _ = _sidecar_for(path or "")
+    if not sc:
+        return jsonify({"error": "no sidecar"}), 400
+    pid, set_id, model = sc.get("catalog_photo_id"), sc.get("set_id"), sc.get("model")
+    out = {"model": model}
+    with _db() as c:
+        if pid:
+            rows = c.execute("SELECT value, source FROM photo_tags"
+                             " WHERE photo_id=? AND dimension='boldness'", (pid,)).fetchall()
+            out["photo_boldness"] = [f"{v} ({s})" for v, s in rows] or ["(untagged)"]
+        if set_id:
+            expl = c.execute("SELECT 1 FROM tags WHERE set_id=? AND dimension='boldness'"
+                             " AND LOWER(value)='explicit'", (set_id,)).fetchone()
+            out["set_explicit"] = bool(expl)
+            sess = c.execute("SELECT session_id FROM sets WHERE id=?", (set_id,)).fetchone()
+            if sess:
+                total = c.execute("SELECT COUNT(*) FROM sets WHERE session_id=?",
+                                  (sess[0],)).fetchone()[0]
+                nexpl = c.execute(
+                    "SELECT COUNT(DISTINCT t.set_id) FROM tags t JOIN sets s ON s.id=t.set_id"
+                    " WHERE s.session_id=? AND t.dimension='boldness'"
+                    " AND LOWER(t.value)='explicit'", (sess[0],)).fetchone()[0]
+                out["session_explicit_sets"] = f"{nexpl}/{total}"
+    if model:
+        from src import consent as sp_consent
+        entry = sp_consent.load_allowlist().get("models", {}).get(model, {})
+        out["consent"] = entry.get("ig", "(not in allowlist)")
+        out["consent_confirmed"] = entry.get("confirmed", False)
+        stem = Path(path).name.split("__")[1].lower() if "__" in Path(path).name else ""
+        for k, rec in (entry.get("photos") or {}).items():
+            if stem and stem in k.lower():
+                out["photo_consent"] = rec.get("decision")
+    return jsonify(out)
+
+
 @bp.post("/api/catalog/correct")
 def correct():
     body = request.json or {}

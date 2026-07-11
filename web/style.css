@@ -244,6 +244,7 @@ table.db-table tbody tr:hover { background: rgba(255,255,255,0.03); }
 .q-lookfor { color: var(--muted); font-style: italic; margin: 2px 0 4px; }
 .lightbox-ig-note { text-align: center; padding: 4px 0; }
 .lightbox-sidecar { text-align: center; padding: 2px 12px; font-size: 0.85rem; color: var(--text); opacity: 0.9; }
+.fix-current { width: 100%; text-align: center; font-size: 0.8rem; color: var(--muted); padding: 4px 8px; }
 .lane-subheader {
   font-weight: 600; color: var(--muted); text-transform: capitalize;
   padding: 6px 0 2px; margin-top: 8px; border-bottom: 1px dashed var(--border);

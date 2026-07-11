@@ -264,12 +264,32 @@ function renderLightbox(project) {
       ["consent_anon", "Model → anon only", true],
       ["consent_no", "Model → never publish", true],
     ];
-    fixBtn.addEventListener("click", () => {
+    fixBtn.addEventListener("click", async () => {
       const menu = document.getElementById("lbFixMenu");
       if (!menu.classList.contains("hidden")) { menu.classList.add("hidden"); return; }
+      menu.innerHTML = `<span class="muted">loading current state…</span>`;
+      menu.classList.remove("hidden");
+      let st = {};
+      try { st = await api(`/api/catalog/status?path=${encodeURIComponent(item.path)}`); }
+      catch (e) { /* toasted */ }
       menu.innerHTML = "";
+      const cur = [];
+      if (st.photo_boldness) cur.push(`photo: ${st.photo_boldness.join(", ")}`);
+      if (st.set_explicit != null) cur.push(`set: ${st.set_explicit ? "explicit" : "not explicit"}`);
+      if (st.session_explicit_sets) cur.push(`session: ${st.session_explicit_sets} sets explicit`);
+      if (st.consent) cur.push(`consent: ${st.consent}${st.consent_confirmed ? "" : " (unconfirmed)"}`);
+      if (st.photo_consent) cur.push(`this photo: ${st.photo_consent}`);
+      if (cur.length) menu.appendChild(el(`<div class="fix-current">NOW → ${cur.join(" · ")}</div>`));
+      const isCur = (action) =>
+        (action === "photo_nsfw" && (st.photo_boldness || []).some((x) => x.startsWith("explicit"))) ||
+        (action === "photo_safe" && (st.photo_boldness || []).some((x) => x.startsWith("safe"))) ||
+        (action === "session_nsfw" && st.session_explicit_sets &&
+          st.session_explicit_sets.split("/")[0] === st.session_explicit_sets.split("/")[1]) ||
+        (action === "consent_per_photo" && st.consent === "per_photo") ||
+        (action === "consent_anon" && st.consent === "anon_only") ||
+        (action === "consent_no" && st.consent === "no");
       for (const [action, label, confirmFirst] of FIXES) {
-        const b = el(`<button class="chip">${label}</button>`);
+        const b = el(`<button class="chip ${isCur(action) ? "active" : ""}">${label}${isCur(action) ? " ✓" : ""}</button>`);
         b.addEventListener("click", async () => {
           menu.classList.add("hidden");
           if (confirmFirst && !confirm(`${label} — apply to the catalog/allowlist?`)) return;
@@ -283,7 +303,6 @@ function renderLightbox(project) {
         });
         menu.appendChild(b);
       }
-      menu.classList.remove("hidden");
     });
   }
   async function voteBtn(id, vote, patch, msg) {
