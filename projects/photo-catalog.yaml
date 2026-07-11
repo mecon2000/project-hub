@@ -1,5 +1,23 @@
 name: photo-catalog
 label: "Photo catalog (130k photos)"
+content:
+  root: ~/.openclaw/workspace/shared/rediscovery
+  areas:
+    inbox:
+      dir: inbox
+      media: [photo]
+actions:
+  mine:
+    label: "Mine the archive (rediscovery batch → inbox)"
+    script: ~/gitrep/photo-catalogging/rediscover.py
+    output_dir_arg: "--local-output-dir"
+    output_area: inbox
+    params:
+      count: {type: int, min: 6, max: 60, default: 24, flag: "--count"}
+      min-rating: {type: float, min: 0, max: 5, default: 2, flag: "--min-rating"}
+      model: {type: str, flag: "--model", description: "only this model (optional)", advanced: true}
+      per-session-cap: {type: int, min: 1, max: 10, default: 3, flag: "--per-session-cap", advanced: true}
+    wall_time_estimate_sec: 300
 db_views:
   - name: catalog
     label: "Catalog"

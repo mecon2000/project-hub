@@ -130,6 +130,25 @@ function renderGrid(project) {
   });
 }
 
+function sidecarInfoHtml(item) {
+  const sc = item.sidecar;
+  if (!sc) return "";
+  const bits = [];
+  if (sc.model) bits.push(`<b>${sc.model}</b>`);
+  if (sc.session_date) bits.push(`${sc.session_date}${sc.location ? " · " + sc.location : ""}`);
+  if (sc.lr_rating != null) bits.push("★".repeat(Math.round(sc.lr_rating)) || "☆");
+  if (sc.source_kind) bits.push(String(sc.source_kind).startsWith("camera_jpeg")
+    ? "📷 camera JPEG (unedited)" : sc.source_kind);
+  if (sc.consent_rule) bits.push(`consent: ${sc.consent_rule}`);
+  if (sc.vote) bits.push(sc.vote === "good" ? "👍" : "👎");
+  if (sc.lr_shortlisted) bits.push("📋 LR shortlist");
+  if (sc.lr_keywords) {
+    const kw = String(sc.lr_keywords).replace(/[\[\]"]/g, "");
+    bits.push(`<span class="muted">${kw.slice(0, 80)}${kw.length > 80 ? "…" : ""}</span>`);
+  }
+  return bits.length ? `<div class="lightbox-sidecar">${bits.join(" · ")}</div>` : "";
+}
+
 // ---- Compare pick mode ----
 let comparePick = null;
 let comparePickKeyHandler = null;
@@ -200,6 +219,7 @@ function renderLightbox(project) {
       <button class="lightbox-nav next" id="lbNext">›</button>
     </div>
     <div class="lightbox-info">${item.name} · ${humanSize(item.size)} · ${relTime(item.mtime)}</div>
+    ${sidecarInfoHtml(item)}
     <div class="lightbox-actions">
       <button class="btn secondary" id="lbFav">${item.sidecar && item.sidecar.fav ? "★ Faved" : "☆ Fav"}</button>
       <button class="btn secondary" id="lbGood">👍</button>
@@ -207,10 +227,13 @@ function renderLightbox(project) {
       <button class="btn" id="lbRunAction">Run action…</button>
       ${item.kind === "video" ? '<button class="btn secondary" id="lbCompare">Compare with…</button>' : ""}
       <button class="btn secondary" id="lbToIG">→ IG…</button>
+      ${item.sidecar && item.sidecar.catalog_photo_id ? '<button class="btn secondary" id="lbFixData">Fix data…</button>' : ""}
+      ${item.sidecar && String(item.sidecar.source_kind || "").startsWith("camera_jpeg") ? '<button class="btn secondary" id="lbLRList">LR shortlist</button>' : ""}
       <button class="btn secondary" id="lbCopyPath">Copy path</button>
       <button class="btn danger" id="lbDelete">Delete</button>
     </div>
     <div class="chip-row hidden" id="lbIGMenu"></div>
+    <div class="chip-row hidden" id="lbFixMenu"></div>
     ${item.sidecar && item.sidecar.queued_to_sp
       ? `<div class="muted lightbox-ig-note">📤 queued to IG: ${item.sidecar.queued_to_sp.map((q) => `${q.account} ${q.type}`).join(", ")}</div>` : ""}
   `;
@@ -231,6 +254,51 @@ function renderLightbox(project) {
     cmpBtn.addEventListener("click", () => {
       startComparePick(item);
       history.back();
+    });
+  }
+  const fixBtn = document.getElementById("lbFixData");
+  if (fixBtn) {
+    const FIXES = [
+      ["photo_nsfw", "Photo is NSFW", false],
+      ["photo_safe", "Photo is SFW ✓ (override)", false],
+      ["session_nsfw", "Whole SESSION is NSFW", true],
+      ["consent_per_photo", "Model → per-photo consent", true],
+      ["consent_anon", "Model → anon only", true],
+      ["consent_no", "Model → never publish", true],
+    ];
+    fixBtn.addEventListener("click", () => {
+      const menu = document.getElementById("lbFixMenu");
+      if (!menu.classList.contains("hidden")) { menu.classList.add("hidden"); return; }
+      menu.innerHTML = "";
+      for (const [action, label, confirmFirst] of FIXES) {
+        const b = el(`<button class="chip">${label}</button>`);
+        b.addEventListener("click", async () => {
+          menu.classList.add("hidden");
+          if (confirmFirst && !confirm(`${label} — apply to the catalog/allowlist?`)) return;
+          try {
+            const r = await api("/api/catalog/correct", {
+              method: "POST", headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ path: item.path, action }),
+            });
+            toast(r.note || "corrected");
+          } catch (e) { /* toasted */ }
+        });
+        menu.appendChild(b);
+      }
+      menu.classList.remove("hidden");
+    });
+  }
+  const lrBtn = document.getElementById("lbLRList");
+  if (lrBtn) {
+    lrBtn.addEventListener("click", async () => {
+      try {
+        const r = await api("/api/catalog/lr-shortlist", {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ path: item.path }),
+        });
+        item.sidecar = Object.assign(item.sidecar || {}, { lr_shortlisted: true });
+        toast(r.note || "shortlisted for LR editing");
+      } catch (e) { /* toasted */ }
     });
   }
   async function voteBtn(id, vote, patch, msg) {

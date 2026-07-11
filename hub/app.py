@@ -31,6 +31,11 @@ def create_app() -> Flask:
         app.register_blueprint(sp_bp)
     except Exception as e:
         print(f"[app] social-publisher ext not loaded: {e}")
+    try:
+        from hub.ext.catalog_triage import bp as ct_bp
+        app.register_blueprint(ct_bp)
+    except Exception as e:
+        print(f"[app] catalog-triage ext not loaded: {e}")
     scheduler.start()
     return app
 

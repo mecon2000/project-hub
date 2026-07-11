@@ -443,10 +443,18 @@ def queue_image():
     dest_img = folder / Path(src).name
     shutil.copyfile(src, dest_img)
 
+    caption, tags = "", []
+    if itype == "post":
+        # arrive ready-to-review: same captioner + hashtag machinery refill uses
+        try:
+            from src.refill import _tags
+            tags = _tags(src)
+        except Exception:  # noqa: BLE001
+            pass
     item = {
         "id": item_id, "account": account, "type": itype, "subtype": "manual",
         "status": "queued", "model": model,
-        "caption": "", "hashtags": [],
+        "caption": caption, "hashtags": tags,
         "image_paths": [str(dest_img)], "source_photos": [src],
         "consent_verified": ({"rule": rule, "source": "allowlist via hub"}
                              if status == "confirmed" else None),
@@ -454,6 +462,23 @@ def queue_image():
         "created_by": f"hub queue-image (consent: {status})",
     }
     (folder / "data.json").write_text(json.dumps(item, indent=2, ensure_ascii=False))
+
+    if itype == "post":
+        # caption takes ~20s (claude CLI) — fill it in the background; the card
+        # shows it on the next queue refresh (Edit can always rewrite it)
+        import threading
+
+        def _fill_caption(data_path: Path, snapshot: dict):
+            try:
+                snapshot["caption"] = captioner.regen_caption(snapshot, None)
+                current = json.loads(data_path.read_text())
+                current["caption"] = snapshot["caption"]
+                data_path.write_text(json.dumps(current, indent=2, ensure_ascii=False))
+            except Exception:  # noqa: BLE001
+                pass
+
+        threading.Thread(target=_fill_caption, args=(folder / "data.json", dict(item)),
+                         daemon=True).start()
 
     # tag the source photo's sidecar (tag, don't move — provenance stays intact)
     sidecar_path = src + ".json"
