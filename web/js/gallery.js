@@ -141,7 +141,6 @@ function sidecarInfoHtml(item) {
     ? "📷 camera JPEG (unedited)" : sc.source_kind);
   if (sc.consent_rule) bits.push(`consent: ${sc.consent_rule}`);
   if (sc.vote) bits.push(sc.vote === "good" ? "👍" : "👎");
-  if (sc.lr_shortlisted) bits.push("📋 LR shortlist");
   if (sc.lr_keywords) {
     const kw = String(sc.lr_keywords).replace(/[\[\]"]/g, "");
     bits.push(`<span class="muted">${kw.slice(0, 80)}${kw.length > 80 ? "…" : ""}</span>`);
@@ -228,7 +227,6 @@ function renderLightbox(project) {
       ${item.kind === "video" ? '<button class="btn secondary" id="lbCompare">Compare with…</button>' : ""}
       <button class="btn secondary" id="lbToIG">→ IG…</button>
       ${item.sidecar && item.sidecar.catalog_photo_id ? '<button class="btn secondary" id="lbFixData">Fix data…</button>' : ""}
-      ${item.sidecar && String(item.sidecar.source_kind || "").startsWith("camera_jpeg") ? '<button class="btn secondary" id="lbLRList">LR shortlist</button>' : ""}
       <button class="btn secondary" id="lbCopyPath">Copy path</button>
       <button class="btn danger" id="lbDelete">Delete</button>
     </div>
@@ -286,19 +284,6 @@ function renderLightbox(project) {
         menu.appendChild(b);
       }
       menu.classList.remove("hidden");
-    });
-  }
-  const lrBtn = document.getElementById("lbLRList");
-  if (lrBtn) {
-    lrBtn.addEventListener("click", async () => {
-      try {
-        const r = await api("/api/catalog/lr-shortlist", {
-          method: "POST", headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ path: item.path }),
-        });
-        item.sidecar = Object.assign(item.sidecar || {}, { lr_shortlisted: true });
-        toast(r.note || "shortlisted for LR editing");
-      } catch (e) { /* toasted */ }
     });
   }
   async function voteBtn(id, vote, patch, msg) {

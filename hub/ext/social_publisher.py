@@ -62,6 +62,7 @@ def _card(item: dict, data_path: str) -> dict:
         "stickers": item.get("story_stickers", []), "poll_options": item.get("poll_options"),
         "prompt": item.get("prompt"), "countdown": item.get("countdown"),
         "mention": item.get("mention"), "look_for": item.get("look_for"),
+        "needs_editing": item.get("needs_editing", False),
         "images": [{"url": "/file?path=" + quote(p), "win": sp_config.win_path(p),
                     "name": Path(p).name}
                    for p in imgs if os.path.exists(p)],
@@ -461,6 +462,19 @@ def queue_image():
         "consent_note": notes if status in ("per_photo", "unknown") else None,
         "created_by": f"hub queue-image (consent: {status})",
     }
+    # rediscovery camera-JPEG finds: mark the card as needing a proper LR edit —
+    # the dispatcher skips it, and "Re-pull export" swaps in the export once made
+    for sc_p in (src + ".json", os.path.splitext(src)[0] + ".json"):
+        if os.path.isfile(sc_p):
+            try:
+                src_sc = json.loads(Path(sc_p).read_text())
+            except ValueError:
+                break
+            if str(src_sc.get("source_kind", "")).startswith("camera_jpeg"):
+                item["needs_editing"] = True
+                item["archive_raw"] = src_sc.get("original_path")
+                item["archive_session"] = src_sc.get("session_folder")
+            break
     (folder / "data.json").write_text(json.dumps(item, indent=2, ensure_ascii=False))
 
     if itype == "post":
@@ -538,6 +552,44 @@ def crop_apply():
     if r.returncode != 0:
         return jsonify({"error": "crop apply failed: " + (r.stderr or "")[-200:]}), 500
     shutil.rmtree(Path(p).parent / "crop_opts", ignore_errors=True)
+    return jsonify(_card(d, str(p)))
+
+
+@bp.post("/api/sp/refresh-export")
+def refresh_export():
+    """User exported the raw in Lightroom → find the export by stem in the session
+    folder (processed/500px/facebook/… ladder) and swap it into the card."""
+    from src.photos_source import PRIORITY, classify_folder
+    d, p = _find((request.json or {}).get("id", ""))
+    if not d:
+        abort(404)
+    raw = d.get("archive_raw")
+    base = d.get("archive_session") or (str(Path(raw).parent) if raw else None)
+    if not base or not os.path.isdir(base):
+        return jsonify({"error": "no archive session folder on this card"}), 400
+    stem = Path(raw or d["image_paths"][0]).stem.lower()
+    best = None
+    for root, dirs, files in os.walk(base):
+        rel = Path(root).relative_to(base).parts
+        classes = [classify_folder(x) for x in rel] or ["other"]
+        if any(c in ("block", "nsfw") for c in classes):
+            dirs[:] = []
+            continue
+        prio = max((PRIORITY.get(c, 0) for c in classes), default=0)
+        for f in files:
+            if os.path.splitext(f)[1].lower() in (".jpg", ".jpeg") \
+                    and os.path.splitext(f)[0].lower() == stem:
+                if best is None or prio > best[0]:
+                    best = (prio, os.path.join(root, f))
+    if not best:
+        return jsonify({"error": f"no exported jpg for '{stem}' found under "
+                                 f"{sp_config.win_path(base)} yet"}), 404
+    target = d["image_paths"][0]
+    shutil.copyfile(best[1], target)
+    d["source_photos"] = [best[1]]
+    d["needs_editing"] = False
+    d["export_pulled_from"] = best[1]
+    Path(p).write_text(json.dumps(d, indent=2, ensure_ascii=False))
     return jsonify(_card(d, str(p)))
 
 

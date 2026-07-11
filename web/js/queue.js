@@ -142,7 +142,7 @@ function renderCard(card, lane, laneIdx) {
         <div class="q-thumb">${img ? `<img src="${img.url}" loading="lazy">` : ""}</div>
         <div class="q-content">
           <div class="chip-row q-badges">
-            ${badge(card.type)}${badge(card.subtype)}${badge(card.model)}${card.consent ? badge("consent ✓") : ""}
+            ${badge(card.type)}${badge(card.subtype)}${badge(card.model)}${card.consent ? badge("consent ✓") : ""}${card.needs_editing ? badge("🛠 needs edit") : ""}
           </div>
           ${handle ? `<div class="q-mention"><a href="https://www.instagram.com/${handle}/" target="_blank" rel="noopener">@${handle} ↗</a></div>` : ""}
           ${card.look_for ? `<div class="q-lookfor">🔎 look for: ${card.look_for}</div>` : ""}
@@ -157,6 +157,7 @@ function renderCard(card, lane, laneIdx) {
       <div class="btn-row q-actions">
         <button class="btn secondary q-copy-text">Copy text</button>
         <button class="btn secondary q-copy-path">Copy path</button>
+        ${card.needs_editing ? '<button class="btn secondary q-repull-btn">Re-pull export</button>' : ""}
         <button class="btn secondary q-crop-btn">Crop</button>
         <button class="btn secondary q-edit-btn">Edit</button>
         <button class="btn secondary q-posted-btn">Posted ✓</button>
@@ -180,6 +181,26 @@ function renderCard(card, lane, laneIdx) {
     toast("Copied path");
   });
 
+  const repull = c.querySelector(".q-repull-btn");
+  if (repull) {
+    repull.addEventListener("click", async () => {
+      setCardBusy(c, true);
+      try {
+        const updated = await api("/api/sp/refresh-export", {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ id: card.id }),
+        });
+        if (updated.error) { toast(updated.error, 5000); setCardBusy(c, false); return; }
+        (updated.images || []).forEach((im) => { im.url += `&t=${Date.now()}`; });
+        const i = (lane.items || []).findIndex((it) => it.id === card.id);
+        if (i >= 0) lane.items[i] = updated;
+        c.replaceWith(renderCard(updated, lane, laneIdx));
+        toast("Export pulled in — card is post-ready 🎉");
+        return;
+      } catch (e) { /* toasted */ }
+      setCardBusy(c, false);
+    });
+  }
   c.querySelector(".q-crop-btn").addEventListener("click", async () => {
     setCardBusy(c, true);
     try {

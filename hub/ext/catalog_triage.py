@@ -24,9 +24,6 @@ if SP_REPO not in sys.path:
 bp = Blueprint("catalog_triage", __name__)
 
 CATALOG = os.path.expanduser("~/gitrep/photo-catalogging/data/photo-catalog.db")
-LR_SHORTLIST = Path(os.path.expanduser(
-    "~/.openclaw/workspace/shared/rediscovery/lr-shortlist.txt"))
-ARCHIVE_PREFIX = os.path.expanduser("~/.openclaw/workspace/_archive")
 
 
 def _sidecar_for(path: str) -> tuple[dict, str] | tuple[None, None]:
@@ -100,19 +97,3 @@ def correct():
     return jsonify({"ok": True, "note": note})
 
 
-@bp.post("/api/catalog/lr-shortlist")
-def lr_shortlist():
-    path = safepath.resolve_safe((request.json or {}).get("path", ""))
-    sc, sc_path = _sidecar_for(path or "")
-    if not sc or not sc.get("original_path"):
-        return jsonify({"error": "no original_path in sidecar"}), 400
-    win = sc["original_path"].replace(ARCHIVE_PREFIX, "I:\\Photos").replace("/", "\\")
-    LR_SHORTLIST.parent.mkdir(parents=True, exist_ok=True)
-    existing = LR_SHORTLIST.read_text().splitlines() if LR_SHORTLIST.exists() else []
-    if win not in existing:
-        with open(LR_SHORTLIST, "a") as f:
-            f.write(win + "\n")
-    sc["lr_shortlisted"] = time.strftime("%Y-%m-%d")
-    Path(sc_path).write_text(json.dumps(sc, indent=2, ensure_ascii=False))
-    return jsonify({"ok": True, "note": f"added to LR shortlist ({len(existing) + 1} total)",
-                    "win_path": win})
