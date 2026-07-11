@@ -153,6 +153,34 @@ def _log_feedback(d: dict, reason: str) -> None:
         f.write(json.dumps(rec, ensure_ascii=False) + "\n")
 
 
+def _tag_photo_explicit(src_path: str) -> bool:
+    """Write a photo-level boldness=explicit tag into the catalog DB (photo_tags),
+    matched by filename stem. Best-effort — a removal must never fail on this."""
+    import sqlite3
+    try:
+        stem = Path(src_path).stem.lower()
+        db = os.path.expanduser("~/gitrep/photo-catalogging/data/photo-catalog.db")
+        conn = sqlite3.connect(db, timeout=10)
+        row = conn.execute(
+            "SELECT id FROM photos WHERE LOWER(filename) LIKE ? LIMIT 1",
+            (stem + ".%",)).fetchone()
+        if not row:
+            conn.close()
+            return False
+        exists = conn.execute(
+            "SELECT 1 FROM photo_tags WHERE photo_id=? AND dimension='boldness'"
+            " AND value='explicit'", (row[0],)).fetchone()
+        if not exists:
+            conn.execute(
+                "INSERT INTO photo_tags (photo_id, dimension, value, source)"
+                " VALUES (?, 'boldness', 'explicit', 'user_queue_removal')", (row[0],))
+            conn.commit()
+        conn.close()
+        return True
+    except Exception:  # noqa: BLE001
+        return False
+
+
 def _apply_removal_reason(d: dict, reason: str) -> tuple[bool, str]:
     """Feed the reason back into consent/DB state. Returns (burn_photo, note)."""
     from src import consent as sp_consent
@@ -160,11 +188,17 @@ def _apply_removal_reason(d: dict, reason: str) -> tuple[bool, str]:
     srcs = d.get("source_photos", [])
     if reason in ("nsfw", "no_consent_photo") and model and srcs:
         label = "too NSFW for IG" if reason == "nsfw" else "no consent for this photo"
+        tagged = 0
         for s in srcs:
             sp_consent.set_photo_consent(model, s, approved=False,
                                          notes=f"{label} (queue removal)",
                                          source="hub queue removal")
-        return True, f"photo rejected in allowlist ({label})"
+            if reason == "nsfw" and _tag_photo_explicit(s):
+                tagged += 1
+        note = f"photo rejected in allowlist ({label})"
+        if tagged:
+            note += f" + tagged explicit in catalog DB"
+        return True, note
     if reason == "not_anon" and model:
         # corrective double-write: the model's rule becomes anon_only (fixes a
         # face_ok mislabel + drops them from auto-refill), and THIS photo is
