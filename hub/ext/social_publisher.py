@@ -132,6 +132,7 @@ def queues():
 REMOVE_REASONS = {
     "nsfw":             "Too NSFW for IG",
     "no_consent_photo": "No consent for THIS photo",
+    "not_anon":         "Shows face — this model asked to be anon",
     "block_model":      "Don't post this model at all",
     "bad_photo":        "Weak photo (unflattering/boring)",
     "bad_crop":         "Bad crop (photo itself is fine)",
@@ -164,6 +165,17 @@ def _apply_removal_reason(d: dict, reason: str) -> tuple[bool, str]:
                                          notes=f"{label} (queue removal)",
                                          source="hub queue removal")
         return True, f"photo rejected in allowlist ({label})"
+    if reason == "not_anon" and model:
+        # corrective double-write: the model's rule becomes anon_only (fixes a
+        # face_ok mislabel + drops them from auto-refill), and THIS photo is
+        # rejected outright (a face photo can never suit an anon-only model)
+        sp_consent.set_consent(model, "anon_only", source="hub queue removal",
+                               notes="asked to be anonymous (queue removal)")
+        for s in srcs:
+            sp_consent.set_photo_consent(model, s, approved=False,
+                                         notes="shows face — model is anon_only (queue removal)",
+                                         source="hub queue removal")
+        return True, f"'{model}' set to anon_only + this photo rejected"
     if reason == "block_model" and model:
         sp_consent.set_consent(model, "no", source="hub queue removal",
                                notes="blocked via queue removal")
