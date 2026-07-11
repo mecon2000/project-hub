@@ -83,7 +83,7 @@ def _lane(account: str, kind: str) -> dict:
             except Exception:  # noqa: BLE001
                 pass
     return {"account": account, "kind": kind, "label": f"{account} · {kind}",
-            "target": 16, "items": cards}
+            "target": sp_config.queue_target(), "items": cards}
 
 
 def _find(item_id: str):
