@@ -292,6 +292,51 @@ def queue_image():
     return jsonify({"ok": True, "card": _card(item, str(folder / "data.json"))})
 
 
+@bp.post("/api/sp/crop-options")
+def crop_options():
+    """Subject-aware crop options from the ORIGINAL photo (labeled overlay + montage)."""
+    from src.refill import _ip, _last_json
+    d, p = _find((request.json or {}).get("id", ""))
+    if not d:
+        abort(404)
+    src = (d.get("source_photos") or [None])[0]
+    if not src or not os.path.exists(src):
+        return jsonify({"error": "this card has no original source photo on disk"}), 400
+    outdir = Path(p).parent / "crop_opts"
+    outdir.mkdir(exist_ok=True)
+    r = _ip("options", "--source", src, "--outdir", str(outdir))
+    if r.returncode != 0:
+        return jsonify({"error": "crop options failed: " + (r.stderr or "")[-200:]}), 500
+    j = _last_json(r)
+    return jsonify({
+        "id": d["id"],
+        "options": j["options"],
+        "overlay": "/file?path=" + quote(j["overlay"]),
+        "montage": "/file?path=" + quote(j["montage"]),
+    })
+
+
+@bp.post("/api/sp/crop-apply")
+def crop_apply():
+    """Apply a chosen crop box (from crop-options) to the card's image, from the original."""
+    from src.refill import _ip
+    body = request.json or {}
+    d, p = _find(body.get("id", ""))
+    if not d:
+        abort(404)
+    src = (d.get("source_photos") or [None])[0]
+    target = (d.get("image_paths") or [None])[0]
+    box, fmt = body.get("box"), body.get("fmt")
+    if not (src and target and isinstance(box, list) and len(box) == 4 and fmt):
+        return jsonify({"error": "need box[4] + fmt from crop-options"}), 400
+    r = _ip("apply", "--source", src, "--box", ",".join(str(int(v)) for v in box),
+            "--format", str(fmt), "--out", target)
+    if r.returncode != 0:
+        return jsonify({"error": "crop apply failed: " + (r.stderr or "")[-200:]}), 500
+    shutil.rmtree(Path(p).parent / "crop_opts", ignore_errors=True)
+    return jsonify(_card(d, str(p)))
+
+
 @bp.post("/api/sp/posted")
 def posted():
     """User confirms they published this item manually — status=posted + cadence record

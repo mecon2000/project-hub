@@ -229,6 +229,10 @@ table.db-table tbody tr:hover { background: rgba(255,255,255,0.03); }
 }
 .badge-ig { left: 6px; right: auto; }
 .q-mention a { font-weight: 700; font-size: 1.05rem; color: var(--accent, #4da3ff); text-decoration: none; }
+.crop-picker { display: flex; flex-direction: column; }
+.crop-scroll { flex: 1; overflow-y: auto; padding: 8px; }
+.crop-img { width: 100%; height: auto; border-radius: 8px; margin-bottom: 10px; }
+.crop-choices { padding: 10px; border-top: 1px solid var(--border); background: var(--bg, #111); }
 .q-lookfor { color: var(--muted); font-style: italic; margin: 2px 0 4px; }
 .lightbox-ig-note { text-align: center; padding: 4px 0; }
 .lane-subheader {

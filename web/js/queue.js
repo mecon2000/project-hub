@@ -157,6 +157,7 @@ function renderCard(card, lane, laneIdx) {
       <div class="btn-row q-actions">
         <button class="btn secondary q-copy-text">Copy text</button>
         <button class="btn secondary q-copy-path">Copy path</button>
+        <button class="btn secondary q-crop-btn">Crop</button>
         <button class="btn secondary q-edit-btn">Edit</button>
         <button class="btn secondary q-posted-btn">Posted ✓</button>
         <button class="btn danger q-remove-btn">Remove</button>
@@ -177,6 +178,19 @@ function renderCard(card, lane, laneIdx) {
   c.querySelector(".q-copy-path").addEventListener("click", () => {
     navigator.clipboard.writeText(card.folder_win || "");
     toast("Copied path");
+  });
+
+  c.querySelector(".q-crop-btn").addEventListener("click", async () => {
+    setCardBusy(c, true);
+    try {
+      const r = await api("/api/sp/crop-options", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: card.id }),
+      });
+      setCardBusy(c, false);
+      if (r.error) { toast(r.error); return; }
+      openCropPicker(r, card, lane, laneIdx, c);
+    } catch (e) { setCardBusy(c, false); }
   });
 
   const editBtn = c.querySelector(".q-edit-btn");
@@ -238,6 +252,46 @@ function renderCard(card, lane, laneIdx) {
   });
 
   return c;
+}
+
+function openCropPicker(r, card, lane, laneIdx, cardEl) {
+  const overlay = el(`<div class="lightbox crop-picker">
+    <div class="lightbox-top">
+      <span class="muted">Pick a crop (from the original photo)</span>
+      <button class="lightbox-close">✕</button>
+    </div>
+    <div class="crop-scroll">
+      <img src="${r.overlay}" class="crop-img">
+      <img src="${r.montage}" class="crop-img">
+    </div>
+    <div class="chip-row crop-choices"></div>
+  </div>`);
+  document.body.appendChild(overlay);
+  overlay.querySelector(".lightbox-close").addEventListener("click", () => overlay.remove());
+  const choices = overlay.querySelector(".crop-choices");
+  for (const o of r.options) {
+    const b = el(`<button class="chip">${o.n} · ${o.name} (${o.fmt})</button>`);
+    b.addEventListener("click", async () => {
+      overlay.remove();
+      setCardBusy(cardEl, true);
+      try {
+        const updated = await api("/api/sp/crop-apply", {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ id: card.id, box: o.box, fmt: o.fmt }),
+        });
+        if (updated.error) { toast(updated.error); setCardBusy(cardEl, false); return; }
+        // same file path, new pixels — bust the browser cache
+        (updated.images || []).forEach((im) => { im.url += `&t=${Date.now()}`; });
+        const idxInLane = (lane.items || []).findIndex((it) => it.id === card.id);
+        if (idxInLane >= 0) lane.items[idxInLane] = updated;
+        cardEl.replaceWith(renderCard(updated, lane, laneIdx));
+        toast(`Cropped: ${o.name}`);
+        return;
+      } catch (e) { /* toasted */ }
+      setCardBusy(cardEl, false);
+    });
+    choices.appendChild(b);
+  }
 }
 
 function setCardBusy(cardEl, busy) {

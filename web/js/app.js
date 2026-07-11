@@ -189,7 +189,10 @@ function renderWiring() {
 async function route() {
   const h = parseHash();
   if (h.p) state.project = h.p;
-  if (!state.project && state.projects.length) state.project = state.projects[0].name;
+  if (!state.project && state.projects.length) {
+    const preferred = state.projects.find((p) => p.name === "social-publisher");
+    state.project = (preferred || state.projects[0]).name;   // daily driver first
+  }
   const proj = currentProject();
   const defaultTab = proj && proj.custom_view === "sp-queue" ? "queue" : "home";
   let tab = h.job ? "jobs" : (h.tab || defaultTab);
