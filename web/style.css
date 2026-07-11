@@ -236,6 +236,11 @@ table.db-table tbody tr:hover { background: rgba(255,255,255,0.03); }
 .reason-picker { display: flex; flex-direction: column; }
 .reason-list { display: flex; flex-direction: column; gap: 10px; padding: 20px; max-width: 480px; margin: 0 auto; width: 100%; }
 .reason-btn { text-align: left; }
+.reason-feedback {
+  margin: 0 20px 20px; max-width: 480px; width: calc(100% - 40px); align-self: center;
+  background: var(--card); color: var(--text); border: 1px solid var(--border);
+  border-radius: 8px; padding: 10px; font: inherit;
+}
 .q-lookfor { color: var(--muted); font-style: italic; margin: 2px 0 4px; }
 .lightbox-ig-note { text-align: center; padding: 4px 0; }
 .lane-subheader {

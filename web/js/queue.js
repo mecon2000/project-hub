@@ -237,13 +237,17 @@ function renderCard(card, lane, laneIdx) {
 
   c.querySelector(".q-remove-btn").addEventListener("click", async () => {
     let reasons = {};
-    try { reasons = await api("/api/sp/remove-reasons"); } catch (e) { return; }
+    const subtype = card.subtype || card.type || "";
+    try { reasons = await api(`/api/sp/remove-reasons?subtype=${encodeURIComponent(subtype)}`); }
+    catch (e) { return; }
     const overlay = el(`<div class="lightbox reason-picker">
       <div class="lightbox-top">
         <span class="muted">Why remove? (teaches the system)</span>
         <button class="lightbox-close">✕</button>
       </div>
       <div class="reason-list"></div>
+      <textarea class="reason-feedback" rows="2"
+        placeholder="optional: tell the writer why — guides future cards (e.g. 'more 80s rock', 'too melancholic')"></textarea>
     </div>`);
     document.body.appendChild(overlay);
     overlay.querySelector(".lightbox-close").addEventListener("click", () => overlay.remove());
@@ -251,6 +255,7 @@ function renderCard(card, lane, laneIdx) {
     for (const [key, label] of Object.entries(reasons)) {
       const b = el(`<button class="btn secondary reason-btn">${label}</button>`);
       b.addEventListener("click", async () => {
+        const feedback = overlay.querySelector(".reason-feedback").value.trim();
         overlay.remove();
         if (key === "bad_crop" && !confirm("Tip: the Crop button re-cuts this card from the original. Remove anyway?")) return;
         if (key === "bad_caption" && !confirm("Tip: the Edit button rewrites the caption. Remove anyway?")) return;
@@ -260,7 +265,7 @@ function renderCard(card, lane, laneIdx) {
           const newLane = await api("/api/sp/remove", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ id: card.id, reason: key }),
+            body: JSON.stringify({ id: card.id, reason: key, feedback }),
           });
           if (newLane.warning) toast(newLane.warning);
           if (newLane.note) toast(newLane.note, 5000);

@@ -139,8 +139,47 @@ REMOVE_REASONS = {
     "bad_caption":      "Bad caption/idea (photo itself is fine)",
     "other":            "Other / just don't want it",
 }
+# non-photo cards get their own reason sets — photo reasons make no sense there
+REASONS_BY_SUBTYPE = {
+    "shoutout": {"block_source": "Never suggest this account again",
+                 "other": "Just remove (may be suggested again)"},
+    "found":    {"block_source": "Never suggest this account again",
+                 "other": "Just remove (may be suggested again)"},
+    "quote":    {"block_quote": "Don't use this quote again",
+                 "other": "Just remove"},
+    "lyric":    {"block_song": "This song — never again",
+                 "block_artist": "This ARTIST — never again",
+                 "other": "Just remove"},
+}
 FEEDBACK_LOG = Path(os.path.expanduser(
     "~/.openclaw/workspace/shared/social-publisher/_state/removal_feedback.jsonl"))
+CREATIVE_FEEDBACK = Path(os.path.expanduser(
+    "~/.openclaw/workspace/shared/social-publisher/_state/creative_feedback.jsonl"))
+BLOCKED_SOURCES = Path(os.path.expanduser(
+    "~/.openclaw/workspace/shared/social-publisher/_state/blocked_sources.json"))
+
+
+def _blocked_add(kind: str, value: str) -> None:
+    try:
+        data = json.loads(BLOCKED_SOURCES.read_text()) if BLOCKED_SOURCES.exists() else {}
+    except ValueError:
+        data = {}
+    lst = data.setdefault(kind, [])
+    if value and value not in lst:
+        lst.append(value)
+    BLOCKED_SOURCES.parent.mkdir(parents=True, exist_ok=True)
+    BLOCKED_SOURCES.write_text(json.dumps(data, indent=2, ensure_ascii=False))
+
+
+def _creative_feedback_add(d: dict, text: str) -> None:
+    import time as _t
+    CREATIVE_FEEDBACK.parent.mkdir(parents=True, exist_ok=True)
+    rec = {"date": _t.strftime("%Y-%m-%d %H:%M:%S"),
+           "subtype": d.get("subtype") or d.get("type"),
+           "card": d.get("idea") or d.get("story_text") or d.get("caption", "")[:80],
+           "feedback": text}
+    with open(CREATIVE_FEEDBACK, "a") as f:
+        f.write(json.dumps(rec, ensure_ascii=False) + "\n")
 
 
 def _log_feedback(d: dict, reason: str) -> None:
@@ -216,6 +255,20 @@ def _apply_removal_reason(d: dict, reason: str) -> tuple[bool, str]:
         return True, f"model '{model}' set to ig: no — leaving the pool"
     if reason in ("bad_crop", "bad_caption"):
         return False, "photo NOT burned — it may return with a different crop/caption"
+    if reason == "block_source":
+        h = d.get("mention") or d.get("shoutout") or ""
+        _blocked_add("handles", h)
+        return True, f"{h} won't be suggested again"
+    if reason == "block_quote":
+        _blocked_add("quotes", d.get("quote") or "")
+        return True, "quote retired"
+    if reason == "block_song":
+        song = f"{d.get('artist', '?')} — {d.get('song', '?')}"
+        _blocked_add("songs", song)
+        return True, f"blocked: {song}"
+    if reason == "block_artist":
+        _blocked_add("artists", d.get("artist") or "")
+        return True, f"blocked artist: {d.get('artist')}"
     return True, ""
 
 
@@ -229,6 +282,10 @@ def remove():
     reason = body.get("reason") or "other"
     burn, note = _apply_removal_reason(d, reason)
     _log_feedback(d, reason)
+    feedback = (body.get("feedback") or "").strip()
+    if feedback:
+        _creative_feedback_add(d, feedback)   # read by the ig-queue skill before writing new cards
+        note = (note + "; " if note else "") + "feedback saved for the writer"
     if burn:
         refill.remember(account, d.get("source_photos", []))
     extra_removed = 0
@@ -271,7 +328,8 @@ def remove():
 
 @bp.get("/api/sp/remove-reasons")
 def remove_reasons():
-    return jsonify(REMOVE_REASONS)
+    subtype = request.args.get("subtype", "")
+    return jsonify(REASONS_BY_SUBTYPE.get(subtype, REMOVE_REASONS))
 
 
 @bp.post("/api/sp/edit")
