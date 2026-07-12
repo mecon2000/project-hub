@@ -320,7 +320,17 @@ def remove():
         except OSError:
             pass
     try:
-        refill.refill(account, kind)
+        # refill via SUBPROCESS, not import: always runs the code on disk, so
+        # refill logic changes apply without restarting the hub (the in-process
+        # stale-module trap minted duplicate quote cards once — never again)
+        import subprocess as _sp
+        r = _sp.run([os.path.expanduser("~/openclaw-venv/bin/python"),
+                     os.path.join(SP_REPO, "scripts", "topup.py"),
+                     "--account", account, "--kind", kind,
+                     "--to-target", str(sp_config.queue_target())],
+                    capture_output=True, text=True, timeout=600)
+        if r.returncode != 0:
+            raise RuntimeError((r.stderr or r.stdout or "")[-200:])
     except Exception as e:  # noqa: BLE001
         return jsonify({**_lane(account, kind), "warning": f"refill failed: {e}",
                         **({"note": note} if note else {})})
