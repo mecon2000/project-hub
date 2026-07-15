@@ -63,8 +63,10 @@ def _card(item: dict, data_path: str) -> dict:
         "prompt": item.get("prompt"), "countdown": item.get("countdown"),
         "mention": item.get("mention"), "look_for": item.get("look_for"),
         "needs_editing": item.get("needs_editing", False),
-        "images": [{"url": "/file?path=" + quote(p), "win": sp_config.win_path(p),
-                    "name": Path(p).name}
+        # &v=mtime: the card image is edited IN PLACE (crop/lyric editor), so the
+        # url must change with the pixels or browsers keep showing the stale cache
+        "images": [{"url": f"/file?path={quote(p)}&v={int(os.path.getmtime(p))}",
+                    "win": sp_config.win_path(p), "name": Path(p).name}
                    for p in imgs if os.path.exists(p)],
         "folder_win": sp_config.win_path(folder),
         "copy_text": _copy_text(item),
@@ -584,13 +586,20 @@ def _lyric_state(d: dict, p) -> dict:
     except (OSError, ValueError):
         vdata = {"variants": [], "selected": None}
     img = (d.get("image_paths") or [""])[0]
+
+    def _u(path):
+        try:
+            return f"/file?path={quote(str(path))}&v={int(os.path.getmtime(path))}"
+        except OSError:
+            return "/file?path=" + quote(str(path))
+
     return {
         "id": d["id"],
         "line": d.get("lyric_line") or d.get("story_text") or "",
         "credit": d.get("credit") or (f"({d.get('artist')})" if d.get("artist") else ""),
         "placement": d.get("text_placement", "bottom"),
-        "card_url": "/file?path=" + quote(img),
-        "variants": [{**v, "url": "/file?path=" + quote(str(folder / "variants" / v["file"])),
+        "card_url": _u(img),
+        "variants": [{**v, "url": _u(folder / "variants" / v["file"]),
                       "selected": v["file"] == vdata.get("selected")}
                      for v in vdata.get("variants", [])],
     }
@@ -629,9 +638,11 @@ def lyric_variants(item_id):
     d, p = _find(item_id)
     if not d:
         abort(404)
-    mode = (request.json or {}).get("mode", "different")
+    body = request.json or {}
+    mode = body.get("mode", "different")
+    count = max(1, min(int(body.get("count", 4)), 8))
     ok, out = _sp_script("gen_lyric_variants.py", "--item", str(Path(p).parent),
-                         "--mode", mode, "--count", "2", timeout=600)
+                         "--mode", mode, "--count", str(count), timeout=900)
     if not ok:
         return jsonify({"error": "generation failed: " + out}), 500
     return jsonify(_lyric_state(d, p))

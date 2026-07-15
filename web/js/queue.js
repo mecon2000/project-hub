@@ -334,11 +334,12 @@ function openLyricEditor(st, card, lane, laneIdx, cardEl) {
         <button class="btn lyric-apply">Apply text</button>
       </div>
       <div class="btn-row">
-        <button class="btn secondary lyric-similar">+2 similar art</button>
-        <button class="btn secondary lyric-different">+2 totally different</button>
+        <button class="btn secondary lyric-similar">+4 similar art</button>
+        <button class="btn secondary lyric-different">+4 totally different</button>
       </div>
-      <label class="muted">Art variants (tap to use)</label>
+      <label class="muted">Art variants (tap one to use it — applies immediately)</label>
       <div class="lyric-variants"></div>
+      <button class="btn lyric-done">✓ Done</button>
     </div>
   </div>`);
   document.body.appendChild(overlay);
@@ -400,23 +401,43 @@ function openLyricEditor(st, card, lane, laneIdx, cardEl) {
     busy("");
   });
 
-  for (const [cls, mode, label] of [["lyric-similar", "similar", "2 similar"],
-                                    ["lyric-different", "different", "2 different"]]) {
+  for (const [cls, mode, label] of [["lyric-similar", "similar", "4 similar"],
+                                    ["lyric-different", "different", "4 different"]]) {
     $("." + cls).addEventListener("click", async () => {
-      busy(`generating ${label} artworks (~30s)…`);
+      busy(`generating ${label} artworks (~1 min)…`);
       try {
         state = await api(`/api/sp/lyric/${encodeURIComponent(card.id)}/variants`, {
           method: "POST", headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ mode }),
+          body: JSON.stringify({ mode, count: 4 }),
         });
         paint();
-        toast(`+2 variants (${state.variants.length} total)`);
+        toast(`+4 variants (${state.variants.length} total)`);
       } catch (e) { /* toasted */ }
       busy("");
     });
   }
 
-  $(".lightbox-close").addEventListener("click", async () => {
+  function textDirty() {
+    return $(".lyric-line").value !== state.line
+        || $(".lyric-credit").value !== state.credit
+        || $(".lyric-placement").value !== (state.placement || "bottom");
+  }
+
+  async function closeEditor() {
+    if (textDirty()) {                       // never lose typed-but-unapplied edits
+      busy("applying your text…");
+      try {
+        state = await api(`/api/sp/lyric/${encodeURIComponent(card.id)}/render`, {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            line: $(".lyric-line").value,
+            credit: $(".lyric-credit").value,
+            placement: $(".lyric-placement").value,
+          }),
+        });
+        dirty = true;
+      } catch (e) { busy(""); return; }      // render failed — stay open, error toasted
+    }
     overlay.remove();
     if (dirty) {
       try {
@@ -425,7 +446,10 @@ function openLyricEditor(st, card, lane, laneIdx, cardEl) {
         if (fresh) replaceLane(laneIdx, fresh);
       } catch (e) { /* stale card view until next refresh */ }
     }
-  });
+  }
+
+  $(".lightbox-close").addEventListener("click", closeEditor);
+  $(".lyric-done").addEventListener("click", closeEditor);
 
   paint();
 }
