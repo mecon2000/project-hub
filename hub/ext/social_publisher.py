@@ -568,6 +568,99 @@ def crop_apply():
     return jsonify(_card(d, str(p)))
 
 
+def _sp_script(script: str, *cli_args, timeout: int = 300) -> tuple[bool, str]:
+    """Run a social-publisher script as a subprocess (always disk-fresh code)."""
+    import subprocess as _sp
+    r = _sp.run([os.path.expanduser("~/openclaw-venv/bin/python"),
+                 os.path.join(SP_REPO, "scripts", script), *cli_args],
+                capture_output=True, text=True, timeout=timeout)
+    return r.returncode == 0, (r.stdout + r.stderr)[-800:]
+
+
+def _lyric_state(d: dict, p) -> dict:
+    folder = Path(p).parent
+    try:
+        vdata = json.loads((folder / "variants.json").read_text())
+    except (OSError, ValueError):
+        vdata = {"variants": [], "selected": None}
+    img = (d.get("image_paths") or [""])[0]
+    return {
+        "id": d["id"],
+        "line": d.get("lyric_line") or d.get("story_text") or "",
+        "credit": d.get("credit") or (f"({d.get('artist')})" if d.get("artist") else ""),
+        "placement": d.get("text_placement", "bottom"),
+        "card_url": "/file?path=" + quote(img),
+        "variants": [{**v, "url": "/file?path=" + quote(str(folder / "variants" / v["file"])),
+                      "selected": v["file"] == vdata.get("selected")}
+                     for v in vdata.get("variants", [])],
+    }
+
+
+@bp.get("/api/sp/lyric/<item_id>")
+def lyric_state(item_id):
+    d, p = _find(item_id)
+    if not d:
+        abort(404)
+    return jsonify(_lyric_state(d, p))
+
+
+@bp.post("/api/sp/lyric/<item_id>/render")
+def lyric_render(item_id):
+    d, p = _find(item_id)
+    if not d:
+        abort(404)
+    body = request.json or {}
+    args = ["--item", str(Path(p).parent)]
+    if body.get("line") is not None:
+        args += ["--line", str(body["line"])]
+    if body.get("credit") is not None:
+        args += ["--credit", str(body["credit"])]
+    if body.get("placement"):
+        args += ["--placement", str(body["placement"])]
+    ok, out = _sp_script("render_lyric_card.py", *args)
+    if not ok:
+        return jsonify({"error": "render failed: " + out}), 500
+    d, p = _find(item_id)
+    return jsonify(_lyric_state(d, p))
+
+
+@bp.post("/api/sp/lyric/<item_id>/variants")
+def lyric_variants(item_id):
+    d, p = _find(item_id)
+    if not d:
+        abort(404)
+    mode = (request.json or {}).get("mode", "different")
+    ok, out = _sp_script("gen_lyric_variants.py", "--item", str(Path(p).parent),
+                         "--mode", mode, "--count", "2", timeout=600)
+    if not ok:
+        return jsonify({"error": "generation failed: " + out}), 500
+    return jsonify(_lyric_state(d, p))
+
+
+@bp.post("/api/sp/lyric/<item_id>/select")
+def lyric_select(item_id):
+    d, p = _find(item_id)
+    if not d:
+        abort(404)
+    fname = os.path.basename((request.json or {}).get("file", ""))
+    folder = Path(p).parent
+    src = folder / "variants" / fname
+    if not src.is_file():
+        return jsonify({"error": f"no such variant {fname}"}), 404
+    shutil.copyfile(src, folder / "bg.jpg")
+    try:
+        vdata = json.loads((folder / "variants.json").read_text())
+    except (OSError, ValueError):
+        vdata = {"variants": [{"file": fname, "style": "unknown"}]}
+    vdata["selected"] = fname
+    (folder / "variants.json").write_text(json.dumps(vdata, indent=2, ensure_ascii=False))
+    ok, out = _sp_script("render_lyric_card.py", "--item", str(folder))
+    if not ok:
+        return jsonify({"error": "render failed: " + out}), 500
+    d, p = _find(item_id)
+    return jsonify(_lyric_state(d, p))
+
+
 @bp.post("/api/sp/refresh-export")
 def refresh_export():
     """User exported the raw in Lightroom → find the export by stem in the session

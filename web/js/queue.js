@@ -158,6 +158,7 @@ function renderCard(card, lane, laneIdx) {
         <button class="btn secondary q-copy-text">Copy text</button>
         <button class="btn secondary q-copy-path">Copy path</button>
         ${card.needs_editing ? '<button class="btn secondary q-repull-btn">Re-pull export</button>' : ""}
+        ${card.subtype === "lyric" ? '<button class="btn secondary q-lyric-btn">🎨 Edit card</button>' : ""}
         <button class="btn secondary q-crop-btn">Crop</button>
         <button class="btn secondary q-edit-btn">Edit</button>
         <button class="btn secondary q-posted-btn">Posted ✓</button>
@@ -180,6 +181,16 @@ function renderCard(card, lane, laneIdx) {
     navigator.clipboard.writeText(card.folder_win || "");
     toast("Copied path");
   });
+
+  const lyricBtn = c.querySelector(".q-lyric-btn");
+  if (lyricBtn) {
+    lyricBtn.addEventListener("click", async () => {
+      try {
+        const st = await api(`/api/sp/lyric/${encodeURIComponent(card.id)}`);
+        openLyricEditor(st, card, lane, laneIdx, c);
+      } catch (e) { /* toasted */ }
+    });
+  }
 
   const repull = c.querySelector(".q-repull-btn");
   if (repull) {
@@ -300,6 +311,123 @@ function renderCard(card, lane, laneIdx) {
   });
 
   return c;
+}
+
+function openLyricEditor(st, card, lane, laneIdx, cardEl) {
+  const overlay = el(`<div class="lightbox lyric-editor">
+    <div class="lightbox-top">
+      <span class="muted">Lyric card editor</span>
+      <button class="lightbox-close">✕</button>
+    </div>
+    <div class="lyric-scroll">
+      <img class="lyric-preview" src="">
+      <div class="lyric-busy hidden"><div class="spinner"></div><span></span></div>
+      <label class="muted">Text (newlines = manual breaks)</label>
+      <textarea class="lyric-line" rows="3"></textarea>
+      <div class="lyric-row">
+        <input type="text" class="lyric-credit" placeholder="(Artist)">
+        <select class="lyric-placement">
+          <option value="bottom">bottom</option>
+          <option value="middle">middle</option>
+          <option value="top">top</option>
+        </select>
+        <button class="btn lyric-apply">Apply text</button>
+      </div>
+      <div class="btn-row">
+        <button class="btn secondary lyric-similar">+2 similar art</button>
+        <button class="btn secondary lyric-different">+2 totally different</button>
+      </div>
+      <label class="muted">Art variants (tap to use)</label>
+      <div class="lyric-variants"></div>
+    </div>
+  </div>`);
+  document.body.appendChild(overlay);
+  const $ = (sel) => overlay.querySelector(sel);
+  let state = st;
+  let dirty = false;
+
+  function busy(msg) {
+    $(".lyric-busy span").textContent = msg || "";
+    $(".lyric-busy").classList.toggle("hidden", !msg);
+    ["lyric-apply", "lyric-similar", "lyric-different"].forEach((cls) => {
+      $("." + cls).disabled = !!msg;
+    });
+  }
+
+  function paint() {
+    $(".lyric-preview").src = state.card_url + `&t=${Date.now()}`;
+    $(".lyric-line").value = state.line;
+    $(".lyric-credit").value = state.credit;
+    $(".lyric-placement").value = state.placement || "bottom";
+    const vs = $(".lyric-variants");
+    vs.innerHTML = "";
+    for (const v of state.variants) {
+      const cell = el(`<div class="thumb ${v.selected ? "selected" : ""}" title="${v.style}">
+        <img loading="lazy" src="${v.url}&t=${Date.now()}">
+        <span class="badge">${v.style}</span></div>`);
+      cell.addEventListener("click", async () => {
+        if (v.selected) return;
+        busy("switching art + re-rendering…");
+        try {
+          state = await api(`/api/sp/lyric/${encodeURIComponent(card.id)}/select`, {
+            method: "POST", headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ file: v.file }),
+          });
+          dirty = true;
+          paint();
+        } catch (e) { /* toasted */ }
+        busy("");
+      });
+      vs.appendChild(cell);
+    }
+  }
+
+  $(".lyric-apply").addEventListener("click", async () => {
+    busy("rendering text…");
+    try {
+      state = await api(`/api/sp/lyric/${encodeURIComponent(card.id)}/render`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          line: $(".lyric-line").value,
+          credit: $(".lyric-credit").value,
+          placement: $(".lyric-placement").value,
+        }),
+      });
+      dirty = true;
+      paint();
+      toast("Text rendered");
+    } catch (e) { /* toasted */ }
+    busy("");
+  });
+
+  for (const [cls, mode, label] of [["lyric-similar", "similar", "2 similar"],
+                                    ["lyric-different", "different", "2 different"]]) {
+    $("." + cls).addEventListener("click", async () => {
+      busy(`generating ${label} artworks (~30s)…`);
+      try {
+        state = await api(`/api/sp/lyric/${encodeURIComponent(card.id)}/variants`, {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ mode }),
+        });
+        paint();
+        toast(`+2 variants (${state.variants.length} total)`);
+      } catch (e) { /* toasted */ }
+      busy("");
+    });
+  }
+
+  $(".lightbox-close").addEventListener("click", async () => {
+    overlay.remove();
+    if (dirty) {
+      try {
+        const lanes2 = await api("/api/sp/queues");
+        const fresh = lanes2.find((l) => l.account === lane.account && l.kind === lane.kind);
+        if (fresh) replaceLane(laneIdx, fresh);
+      } catch (e) { /* stale card view until next refresh */ }
+    }
+  });
+
+  paint();
 }
 
 function openCropPicker(r, card, lane, laneIdx, cardEl) {

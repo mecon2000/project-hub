@@ -236,6 +236,22 @@ table.db-table tbody tr:hover { background: rgba(255,255,255,0.03); }
 .reason-picker { display: flex; flex-direction: column; }
 .reason-list { display: flex; flex-direction: column; gap: 10px; padding: 20px; max-width: 480px; margin: 0 auto; width: 100%; }
 .reason-btn { text-align: left; }
+.lyric-editor { display: flex; flex-direction: column; }
+.lyric-scroll { flex: 1; overflow-y: auto; padding: 12px; max-width: 560px; width: 100%; margin: 0 auto; }
+.lyric-preview { width: 60%; max-width: 300px; display: block; margin: 0 auto 10px; border-radius: 8px; }
+.lyric-line, .lyric-credit {
+  width: 100%; background: var(--card); color: var(--text); border: 1px solid var(--border);
+  border-radius: 8px; padding: 10px; font: inherit; margin: 4px 0 10px;
+}
+.lyric-row { display: flex; gap: 8px; align-items: center; }
+.lyric-row .lyric-credit { flex: 1; margin: 0; }
+.lyric-row select {
+  background: var(--card); color: var(--text); border: 1px solid var(--border);
+  border-radius: 8px; padding: 10px;
+}
+.lyric-variants { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 6px; }
+.lyric-variants .thumb .badge { font-size: 0.65rem; }
+.lyric-busy { display: flex; gap: 10px; align-items: center; justify-content: center; padding: 8px; color: var(--muted); }
 .reason-feedback {
   margin: 0 20px 20px; max-width: 480px; width: calc(100% - 40px); align-self: center;
   background: var(--card); color: var(--text); border: 1px solid var(--border);
