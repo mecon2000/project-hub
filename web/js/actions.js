@@ -60,8 +60,9 @@ function renderBody(project) {
   if (action.wall_time_estimate_sec) estBits.push(`~${Math.round(action.wall_time_estimate_sec / 60)} min`);
   if (action.cost_estimate_usd) estBits.push(`~$${action.cost_estimate_usd}`);
 
+  const wantsSources = action.takes_sources !== false;   // undefined (old cache) = show
   body.innerHTML = `
-    <div class="card">
+    ${wantsSources ? `<div class="card">
       <h3>Sources</h3>
       <div class="chip-row" id="srcChips"></div>
       <div class="btn-row">
@@ -69,7 +70,7 @@ function renderBody(project) {
         <button class="btn secondary" id="clearSrcBtn">Clear</button>
       </div>
     </div>
-    <div class="card" id="pickerCard"></div>
+    <div class="card" id="pickerCard"></div>` : ""}
     <div class="card">
       <h3>Parameters</h3>
       <form id="paramsForm"></form>
@@ -81,21 +82,23 @@ function renderBody(project) {
     </div>
   `;
 
-  renderSourceChips();
-  document.getElementById("pickBtn").addEventListener("click", () => {
-    const card = document.getElementById("pickerCard");
-    card.classList.toggle("hidden");
-    if (!card.classList.contains("hidden")) {
-      renderGallery(card, project, {
-        onPick: () => { card.classList.add("hidden"); renderSourceChips(); renderSegmentSection(project, action); },
-      });
-    }
-  });
-  document.getElementById("clearSrcBtn").addEventListener("click", () => {
-    state.selection = [];
+  if (wantsSources) {
     renderSourceChips();
-    renderSegmentSection(project, action);
-  });
+    document.getElementById("pickBtn").addEventListener("click", () => {
+      const card = document.getElementById("pickerCard");
+      card.classList.toggle("hidden");
+      if (!card.classList.contains("hidden")) {
+        renderGallery(card, project, {
+          onPick: () => { card.classList.add("hidden"); renderSourceChips(); renderSegmentSection(project, action); },
+        });
+      }
+    });
+    document.getElementById("clearSrcBtn").addEventListener("click", () => {
+      state.selection = [];
+      renderSourceChips();
+      renderSegmentSection(project, action);
+    });
+  }
 
   const form = document.getElementById("paramsForm");
   const params = action.params || {};
@@ -138,8 +141,8 @@ function renderBody(project) {
     const chosenFlags = Array.from(form.querySelectorAll("[data-flag]"))
       .filter((c) => c.checked)
       .map((c) => c.dataset.flag);
-    const sources = state.selection.map((s) => s.path);
-    if (!sources.length && !action.supports_segment) {
+    const sources = wantsSources ? state.selection.map((s) => s.path) : [];
+    if (wantsSources && !sources.length && !action.supports_segment) {
       toast("Pick at least one source item");
       return;
     }
