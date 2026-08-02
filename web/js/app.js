@@ -4,6 +4,7 @@ import { renderJobs, openJobDetail } from "./jobs.js";
 import { renderSchedules } from "./scheduler.js";
 import { renderDb } from "./dbview.js";
 import { renderQueue } from "./queue.js";
+import { renderLines } from "./lines.js";
 
 export const state = {
   projects: [],
@@ -121,6 +122,7 @@ function updateConditionalTabs(project) {
   };
   show("db", project && project.has_db_views);
   show("queue", project && project.custom_view === "sp-queue");
+  show("lines", project && project.custom_view === "sp-queue");
   // projects without listed areas / actions don't get dead tabs
   show("gallery", project && Object.keys(project.areas || {}).length > 0);
   show("actions", project && Object.keys(project.actions || {}).length > 0);
@@ -200,6 +202,7 @@ async function route() {
   if (tab === "gallery" && proj && !Object.keys(proj.areas || {}).length) tab = defaultTab;
   if (tab === "actions" && proj && !Object.keys(proj.actions || {}).length) tab = defaultTab;
   if (tab === "queue" && (!proj || proj.custom_view !== "sp-queue")) tab = "home";
+  if (tab === "lines" && (!proj || proj.custom_view !== "sp-queue")) tab = "home";
   if (tab === "db" && (!proj || !proj.has_db_views)) tab = "home";
   state.tab = tab;
   state.area = h.area;
@@ -222,6 +225,7 @@ async function route() {
   if (state.tab === "wiring") return renderWiring();
   if (state.tab === "db") return renderDb(view, currentProject());
   if (state.tab === "queue") return renderQueue(view);
+  if (state.tab === "lines") return renderLines(view);
 }
 
 document.getElementById("tabs").addEventListener("click", (e) => {

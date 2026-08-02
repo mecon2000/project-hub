@@ -309,3 +309,28 @@ table.db-table tbody tr:hover { background: rgba(255,255,255,0.03); }
 }
 .q-send-menu button { background: transparent; color: var(--text); border: none; padding: 10px 14px; text-align: left; }
 .q-send-menu button:hover { background: rgba(255,255,255,0.06); }
+
+/* ---- Lines tab ---- */
+.lines-header {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 8px; font-weight: 700; padding: 10px 0; margin-bottom: 6px; font-size: 1.05rem;
+}
+.lines-refill-banner { padding: 4px 0 10px; }
+.lines-subheader {
+  font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: 0.5px;
+  font-size: 0.8rem; padding: 6px 0 6px; margin-top: 10px; border-bottom: 1px dashed var(--border);
+}
+.lines-section { margin-bottom: 10px; }
+.line-row {
+  background: var(--card); border: 1px solid var(--border); border-radius: 8px;
+  padding: 12px; margin: 10px 0; position: relative;
+}
+.line-busy { display: flex; align-items: center; justify-content: center; gap: 10px; padding: 20px 0; color: var(--muted); }
+.line-text { font-family: Georgia, "Times New Roman", serif; font-size: 18px; white-space: pre-wrap; }
+.line-meta { font-size: 13px; margin-top: 4px; }
+.line-edit { margin-top: 10px; }
+.line-edit-text {
+  width: 100%; background: #191919; color: var(--text); border: 1px solid var(--border);
+  border-radius: 8px; padding: 10px; font: inherit; margin-bottom: 8px;
+}
+.line-actions { margin-top: 10px; }

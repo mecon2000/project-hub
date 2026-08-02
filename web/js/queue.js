@@ -158,7 +158,7 @@ function renderCard(card, lane, laneIdx) {
         <button class="btn secondary q-copy-text">Copy text</button>
         <button class="btn secondary q-copy-path">Copy path</button>
         ${card.needs_editing ? '<button class="btn secondary q-repull-btn">Re-pull export</button>' : ""}
-        ${card.subtype === "lyric" ? '<button class="btn secondary q-lyric-btn">🎨 Edit card</button>' : ""}
+        ${card.subtype === "lyric" || card.subtype === "quote" ? '<button class="btn secondary q-lyric-btn">🎨 Edit card</button>' : ""}
         <button class="btn secondary q-crop-btn">Crop</button>
         <button class="btn secondary q-edit-btn">Edit</button>
         <button class="btn secondary q-posted-btn">Posted ✓</button>

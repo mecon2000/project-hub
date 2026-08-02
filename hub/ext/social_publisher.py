@@ -570,6 +570,102 @@ def crop_apply():
     return jsonify(_card(d, str(p)))
 
 
+LINES_STATE = Path(os.path.expanduser(
+    "~/.openclaw/workspace/shared/social-publisher/_state/line_candidates.json"))
+LINES_LOCK = LINES_STATE.with_name("lines_refill.lock")
+
+
+def _lines_load() -> dict:
+    try:
+        return json.loads(LINES_STATE.read_text())
+    except (OSError, ValueError):
+        return {"round": 0, "items": [], "shown": {"quotes": [], "lyric_lines": []}}
+
+
+def _lines_refill_running() -> bool:
+    try:
+        import time as _t
+        return LINES_LOCK.exists() and _t.time() - LINES_LOCK.stat().st_mtime < 900
+    except OSError:
+        return False
+
+
+def _kick_lines_refill() -> str | None:
+    """Start a background refill job (hub job = logs + ntfy-quiet) unless one runs."""
+    if _lines_refill_running():
+        return None
+    LINES_LOCK.parent.mkdir(parents=True, exist_ok=True)
+    LINES_LOCK.write_text("")
+    from hub.jobs import runner
+
+    def _argv(out_dir, sources):
+        return [os.path.expanduser("~/openclaw-venv/bin/python"),
+                os.path.join(SP_REPO, "scripts", "refill_lines.py")]
+
+    job = runner.start_job("social-publisher", "refill-lines", _argv, [])
+    return job["id"]
+
+
+@bp.get("/api/sp/lines")
+def lines_list():
+    s = _lines_load()
+    fresh = [i for i in s["items"] if i.get("status") == "fresh"]
+    kicked = None
+    if len(fresh) < 10 and not _lines_refill_running():
+        kicked = _kick_lines_refill()
+    return jsonify({"round": s.get("round", 0), "items": s["items"],
+                    "refilling": _lines_refill_running(), "refill_job": kicked})
+
+
+@bp.post("/api/sp/lines/<cid>/state")
+def lines_state(cid):
+    new_status = (request.json or {}).get("status", "")
+    if new_status not in ("fresh", "maybe"):
+        return jsonify({"error": "status must be fresh|maybe"}), 400
+    s = _lines_load()
+    for it in s["items"]:
+        if it["id"] == cid:
+            it["status"] = new_status
+            LINES_STATE.write_text(json.dumps(s, indent=2, ensure_ascii=False))
+            return jsonify({"ok": True, "status": new_status})
+    return jsonify({"error": "no such candidate"}), 404
+
+
+@bp.post("/api/sp/lines/<cid>/make")
+def lines_make(cid):
+    body = request.json or {}
+    s = _lines_load()
+    cand = next((i for i in s["items"] if i["id"] == cid), None)
+    if not cand:
+        return jsonify({"error": "no such candidate"}), 404
+    if cand.get("status") == "creating":
+        return jsonify({"error": "already creating"}), 409
+    cand["status"] = "creating"
+    LINES_STATE.write_text(json.dumps(s, indent=2, ensure_ascii=False))
+    from hub.jobs import runner
+    text = body.get("text")
+    account = body.get("account", "RW1")
+
+    def _argv(out_dir, sources):
+        argv = [os.path.expanduser("~/openclaw-venv/bin/python"),
+                os.path.join(SP_REPO, "scripts", "create_line_card.py"),
+                "--id", cid, "--account", account, "--variants", "5"]
+        if text:
+            argv += ["--text", text]
+        return argv
+
+    job = runner.start_job("social-publisher", "create-line-card", _argv, [])
+    return jsonify({"job": job["id"]})
+
+
+@bp.post("/api/sp/lines/refill")
+def lines_refill():
+    jid = _kick_lines_refill()
+    if not jid:
+        return jsonify({"error": "refill already running"}), 409
+    return jsonify({"job": jid})
+
+
 def _sp_script(script: str, *cli_args, timeout: int = 300) -> tuple[bool, str]:
     """Run a social-publisher script as a subprocess (always disk-fresh code)."""
     import subprocess as _sp
