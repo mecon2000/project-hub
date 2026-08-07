@@ -65,6 +65,7 @@ button, input, select { font-family: inherit; font-size: 16px; }
   padding: 8px 14px; color: var(--text); font-size: 14px;
 }
 .chip.active { background: var(--accent); color: #041018; border-color: var(--accent); font-weight: 600; }
+a.link-chip { text-decoration: none; display: inline-block; }
 .chip.more { color: var(--muted); }
 
 .gallery-grid {

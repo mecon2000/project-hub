@@ -137,10 +137,15 @@ async function renderHome() {
   }
   for (const p of state.projects) {
     const areaNames = Object.keys(p.areas || {});
+    const linkChips = Object.entries(p.links || {})
+      .map(([k, l]) => `<a class="chip link-chip" href="${l.url}" target="_blank"
+        onclick="event.stopPropagation()">${l.label || k} ↗</a>`)
+      .join("");
     const card = el(`<div class="card">
       <h3>${p.label || p.name}</h3>
       <div class="muted">${areaNames.length} area(s) · ${Object.keys(p.actions || {}).length} action(s)</div>
       <div class="chip-row" data-areas></div>
+      ${linkChips ? `<div class="chip-row">${linkChips}</div>` : ""}
     </div>`);
     card.addEventListener("click", () => {
       state.project = p.name;

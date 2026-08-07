@@ -232,6 +232,15 @@ function nav(project, delta) {
 
 let touchStartX = null;
 
+// Generic per-area deep link (manifest: areas.<a>.link_template {url, label};
+// {path} in url is replaced with the item's encoded absolute path).
+function areaLink(project, item) {
+  const tmpl = project.areas && project.areas[curArea] && project.areas[curArea].link_template;
+  if (!tmpl || !tmpl.url) return "";
+  const url = tmpl.url.replace("{path}", encodeURIComponent(item.path));
+  return `<a class="btn secondary" href="${url}" target="_blank">${tmpl.label || "Open"} ↗</a>`;
+}
+
 function renderLightbox(project) {
   const item = items[lbIndex];
   const lb = document.getElementById("lightbox");
@@ -253,6 +262,7 @@ function renderLightbox(project) {
       ${item.kind === "video" ? '<button class="btn secondary" id="lbCompare">Compare with…</button>' : ""}
       <button class="btn secondary" id="lbToIG">→ IG…</button>
       ${item.sidecar && item.sidecar.catalog_photo_id ? '<button class="btn secondary" id="lbFixData">Fix data…</button>' : ""}
+      ${areaLink(project, item)}
       <button class="btn secondary" id="lbCopyPath">Copy path</button>
       <button class="btn danger" id="lbDelete">Delete</button>
     </div>
