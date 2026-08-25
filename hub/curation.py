@@ -49,15 +49,29 @@ def _git_hash(project: dict) -> str | None:
         return None
 
 
-def _fav(project: dict, path: str) -> dict:
+def _copy_into_favorites(src: Path, name: str | None = None) -> str:
     FAVORITES_DIR.mkdir(parents=True, exist_ok=True)
-    src = Path(path)
-    fav_name = src.name
+    fav_name = name or src.name
     if (FAVORITES_DIR / fav_name).exists():
-        fav_name = f"{src.stem}_{int(time.time())}{src.suffix}"
+        stem, suf = os.path.splitext(fav_name)
+        fav_name = f"{stem}_{int(time.time())}{suf}"
     shutil.copyfile(src, FAVORITES_DIR / fav_name)   # copyfile: drvfs rejects copy2 metadata
+    return fav_name
 
+
+def _append(entry: dict) -> dict:
+    try:
+        data = json.loads(FAVORITES_JSON.read_text()) if FAVORITES_JSON.exists() else {"favorites": []}
+    except ValueError:
+        data = {"favorites": []}
+    data.setdefault("favorites", []).append(entry)
+    FAVORITES_JSON.write_text(json.dumps(data, indent=2, ensure_ascii=False))
+    return entry
+
+
+def _build_entry(project: dict, path: str, fav_name: str) -> dict:
     job = store.find_by_output(path)
+    src = Path(path)
     sidecar = {}
     for sc in (path + ".json", os.path.splitext(path)[0] + ".json"):
         if os.path.isfile(sc):
@@ -83,13 +97,37 @@ def _fav(project: dict, path: str) -> dict:
     stem = src.stem
     if not entry["model"] and "__" in stem and not stem.split("__")[0][:1].isdigit():
         entry["model"] = stem.split("__")[0].replace("_", " ").strip()
-    try:
-        data = json.loads(FAVORITES_JSON.read_text()) if FAVORITES_JSON.exists() else {"favorites": []}
-    except ValueError:
-        data = {"favorites": []}
-    data.setdefault("favorites", []).append(entry)
-    FAVORITES_JSON.write_text(json.dumps(data, indent=2, ensure_ascii=False))
+    return entry
+
+
+def _fav(project: dict, path: str) -> dict:
+    fav_name = _copy_into_favorites(Path(path))
+    entry = _append(_build_entry(project, path, fav_name))
     _sidecar_update(path, {"fav": True, "fav_at": entry["favorited_at"], "fav_file": fav_name})
+    return entry
+
+
+def _fav_group(project: dict, group_dir: str, members: list) -> dict:
+    """ONE favorites entry for a set that only works as a set.
+
+    Writing one entry per frame would put eight near-identical photos in the
+    favourites folder and, worse, give that style eight times its true weight —
+    auto_gen_tick and mine_taste both count one vote per entry, so a single
+    favourited reel would outvote seven separately favourited images.
+    """
+    cover = members[0]
+    label = os.path.basename(group_dir.rstrip(os.sep))
+    if label in ("finals", "final"):                      # <set>/finals -> name it <set>
+        label = os.path.basename(os.path.dirname(group_dir.rstrip(os.sep)))
+    fav_name = _copy_into_favorites(Path(cover), f"{label}{Path(cover).suffix}")
+    entry = _build_entry(project, cover, fav_name)
+    entry.update({"kind": "group", "group": label, "count": len(members),
+                  "members": [os.path.basename(m) for m in members],
+                  "group_dir": group_dir})
+    _append(entry)
+    stamp = entry["favorited_at"]
+    for m in members:                                     # mark each frame, no extra votes
+        _sidecar_update(m, {"fav": True, "fav_at": stamp, "fav_group": label})
     return entry
 
 
@@ -130,7 +168,7 @@ def vote(name):
             return jsonify({"error": "no votable files in that group"}), 400
         if v == "fav":
             return jsonify({"ok": True, "count": len(members),
-                            "entries": [_fav(proj, m) for m in members]})
+                            "entry": _fav_group(proj, path, members)})
         stamp = time.strftime("%Y-%m-%d %H:%M:%S")
         for m in members:
             _sidecar_update(m, {"vote": v, "voted_at": stamp})
