@@ -22,6 +22,7 @@ bp = Blueprint("curation", __name__)
 
 FAVORITES_DIR = Path(os.path.expanduser("~/.openclaw/workspace/shared/favorites"))
 FAVORITES_JSON = FAVORITES_DIR / "favorites.json"
+GROUP_VOTE_EXTS = {".jpg", ".jpeg", ".png", ".webp", ".mp4", ".mov"}
 BLACKLIST_JSON = Path(os.path.expanduser("~/.openclaw/workspace/shared/blacklisted_models.json"))
 
 
@@ -118,6 +119,22 @@ def vote(name):
             bl.append(model)
             BLACKLIST_JSON.write_text(json.dumps(data, indent=2, ensure_ascii=False))
         return jsonify({"ok": True, "blacklisted": model})
+    # A grouped area (group_by: dir) votes on a directory: apply to every member,
+    # so favouriting a set that was authored as a unit keeps the unit intact.
+    if path and os.path.isdir(path):
+        members = sorted(
+            os.path.join(path, f) for f in os.listdir(path)
+            if os.path.isfile(os.path.join(path, f))
+            and os.path.splitext(f)[1].lower() in GROUP_VOTE_EXTS)
+        if not members:
+            return jsonify({"error": "no votable files in that group"}), 400
+        if v == "fav":
+            return jsonify({"ok": True, "count": len(members),
+                            "entries": [_fav(proj, m) for m in members]})
+        stamp = time.strftime("%Y-%m-%d %H:%M:%S")
+        for m in members:
+            _sidecar_update(m, {"vote": v, "voted_at": stamp})
+        return jsonify({"ok": True, "vote": v, "count": len(members)})
     if not path or not os.path.isfile(path):
         return jsonify({"error": "bad path"}), 400
     if v == "fav":
