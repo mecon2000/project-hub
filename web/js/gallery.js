@@ -100,8 +100,10 @@ function renderGrid(project) {
   const grid = document.getElementById("galGrid");
   grid.innerHTML = "";
   items.forEach((item, idx) => {
+    const thumbSrc = item.kind === "group" ? item.cover : item.path;
     const thumb = el(`<div class="thumb">
-      <img loading="lazy" src="/thumb?path=${encodeURIComponent(item.path)}">
+      <img loading="lazy" src="/thumb?path=${encodeURIComponent(thumbSrc)}">
+      ${item.kind === "group" ? `<span class="badge" title="${item.count} frames — opens as a slideshow">▤ ${item.count}</span>` : ""}
       ${item.kind === "video" ? '<span class="badge">▶</span>' : ""}
       ${item.sidecar && item.sidecar.queued_to_sp ? '<span class="badge badge-ig" title="queued to social publisher">📤</span>' : ""}
     </div>`);
@@ -207,14 +209,55 @@ function openLightbox(project, idx) {
 
   function keyHandler(e) {
     if (e.key === "Escape") closeLightbox();
-    if (e.key === "ArrowLeft") nav(project, -1);
-    if (e.key === "ArrowRight") nav(project, 1);
+    const inGroup = slide !== null;          // arrows walk the reel, not the gallery
+    if (e.key === "ArrowLeft") inGroup ? slideStep(-1) : nav(project, -1);
+    if (e.key === "ArrowRight") inGroup ? slideStep(1) : nav(project, 1);
   }
   lb.dataset.keyBound = "1";
   lb._keyHandler = keyHandler;
 }
 
+// --- group slideshow -------------------------------------------------------
+// A grouped set (a reel) is authored as a sequence, so opening one plays through
+// its frames. Any manual step hands control to the viewer and stops the autoplay —
+// re-starting it under someone who is stepping through would fight them.
+let slide = null;
+
+function startSlideshow(item) {
+  stopSlideshow();
+  slide = { frames: item.members || [], i: 0, timer: null, playing: true };
+  if (slide.frames.length < 2) { slide.playing = false; return; }
+  slide.timer = setInterval(() => slideShow(1), 500);
+}
+
+function stopSlideshow() {
+  if (slide && slide.timer) clearInterval(slide.timer);
+  slide = null;
+}
+
+function slideShow(delta) {
+  if (!slide || !slide.frames.length) return;
+  slide.i = (slide.i + delta + slide.frames.length) % slide.frames.length;
+  const img = document.getElementById("lbImg");
+  if (img) img.src = `/file?path=${encodeURIComponent(slide.frames[slide.i])}`;
+  const pos = document.getElementById("lbSlidePos");
+  if (pos) pos.textContent = String(slide.i + 1);
+}
+
+function slideStep(delta) {
+  if (!slide) return;
+  if (slide.playing) {                 // first manual step takes over
+    clearInterval(slide.timer);
+    slide.timer = null;
+    slide.playing = false;
+    const st = document.getElementById("lbSlideState");
+    if (st) st.textContent = "paused — you have the controls";
+  }
+  slideShow(delta);
+}
+
 function closeLightbox() {
+  stopSlideshow();
   const lb = document.getElementById("lightbox");
   lb.classList.add("hidden");
   const vv = lb.querySelector(".video-viewer");
@@ -251,10 +294,14 @@ function renderLightbox(project) {
     </div>
     <div class="lightbox-media">
       <button class="lightbox-nav prev" id="lbPrev">‹</button>
-      ${item.kind === "video" ? "" : `<img src="/file?path=${encodeURIComponent(item.path)}">`}
+      ${item.kind === "video" ? ""
+        : `<img id="lbImg" src="/file?path=${encodeURIComponent(item.kind === "group" ? item.cover : item.path)}">`}
       <button class="lightbox-nav next" id="lbNext">›</button>
     </div>
-    <div class="lightbox-info">${item.name} · ${humanSize(item.size)} · ${relTime(item.mtime)}</div>
+    <div class="lightbox-info">${item.name} · ${
+      item.kind === "group" ? `<span id="lbSlidePos">1</span>/${item.count} frames` : humanSize(item.size)
+    } · ${relTime(item.mtime)}${
+      item.kind === "group" ? ' · <span class="muted" id="lbSlideState">playing</span>' : ""}</div>
     ${sidecarInfoHtml(item)}
     <div class="lightbox-actions">
       <button class="btn secondary" id="lbFav">${item.sidecar && item.sidecar.fav ? "★ Faved" : "☆ Fav"}</button>
@@ -275,10 +322,13 @@ function renderLightbox(project) {
     const media = lb.querySelector(".lightbox-media");
     attachVideo(media, item.path, { autoplay: true });
   }
+  if (item.kind === "group") startSlideshow(item);
   lb._keyHandler = lb._keyHandler; // keep reference
   document.getElementById("lbClose").addEventListener("click", () => history.back());
-  document.getElementById("lbPrev").addEventListener("click", () => nav(project, -1));
-  document.getElementById("lbNext").addEventListener("click", () => nav(project, 1));
+  document.getElementById("lbPrev").addEventListener("click", () =>
+    item.kind === "group" ? slideStep(-1) : nav(project, -1));
+  document.getElementById("lbNext").addEventListener("click", () =>
+    item.kind === "group" ? slideStep(1) : nav(project, 1));
   document.getElementById("lbRunAction").addEventListener("click", () => {
     if (!state.selection.some((s) => s.path === item.path)) state.selection.push(item);
     if (hasSourceActions(project)) setHash({ tab: "actions" });
@@ -414,7 +464,10 @@ function renderLightbox(project) {
   media.addEventListener("touchend", (e) => {
     if (touchStartX == null) return;
     const dx = e.changedTouches[0].clientX - touchStartX;
-    if (Math.abs(dx) > 50) nav(project, dx < 0 ? 1 : -1);
+    if (Math.abs(dx) > 50) {
+      const d = dx < 0 ? 1 : -1;
+      slide ? slideStep(d) : nav(project, d);   // swipe steps the reel on mobile
+    }
     touchStartX = null;
   }, { passive: true });
 }
