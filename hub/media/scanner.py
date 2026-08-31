@@ -1,6 +1,7 @@
 """List media items in a project's content areas, with JSON sidecars."""
 import json
 import os
+import re
 
 PHOTO_EXT = {".jpg", ".jpeg", ".png", ".webp", ".gif", ".bmp"}
 VIDEO_EXT = {".mp4", ".webm", ".mov", ".mkv", ".avi"}
@@ -13,6 +14,11 @@ def kind_of(path: str) -> str | None:
     if ext in VIDEO_EXT:
         return "video"
     return None
+
+
+
+
+_IS_VIDEO = re.compile(r"\.(mp4|mov|m4v|webm)$", re.I)
 
 
 def _group_by_dir(items: list, base: str) -> list:
@@ -33,11 +39,15 @@ def _group_by_dir(items: list, base: str) -> list:
         if rel in (".", ""):
             loose.append(it)
             continue
+        # Key on the TOP-level directory, not the immediate parent: a set stored as
+        # <set>/x.mp4 + <set>/frames/*.jpg is one thing the user made, and keying on
+        # the parent split it into two cards with the same name.
+        rel = rel.split(os.sep)[0]
         # Name the group after its top-level directory, so a set stored as
         # <set>/finals/*.jpg presents as one card called <set> rather than
         # "<set>/finals". Auxiliary subdirectories are excluded by prefixing them
         # with "_", which os.walk already skips above.
-        label = rel.split(os.sep)[0]
+        label = rel
         g = groups.get(rel)
         if g is None:
             g = groups[rel] = {"name": label, "path": os.path.dirname(it["path"]),
@@ -48,9 +58,11 @@ def _group_by_dir(items: list, base: str) -> list:
         g["members"].append(it["path"])
         if it["mtime"] > g["mtime"]:
             g["mtime"] = it["mtime"]
-        # cover = first frame by name, so it is stable as the group grows
-        if g["cover"] is None or it["path"] < g["cover"]:
-            g["cover"] = it["path"]
+    # Video first, then stills by name: a rendered candidate should open on the video,
+    # with the frames that made it available behind it.
+    for g in groups.values():
+        g["members"].sort(key=lambda p: (0 if _IS_VIDEO.search(p) else 1, p))
+        g["cover"] = g["members"][0]
     return loose + list(groups.values())
 
 

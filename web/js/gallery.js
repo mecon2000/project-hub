@@ -222,6 +222,8 @@ function openLightbox(project, idx) {
 // its frames. Any manual step hands control to the viewer and stops the autoplay —
 // re-starting it under someone who is stepping through would fight them.
 let slide = null;
+const VIDEO_RE = /\.(mp4|mov|m4v|webm)$/i;
+const isVideo = (p) => VIDEO_RE.test(p || "");
 
 function startSlideshow(item) {
   stopSlideshow();
@@ -238,6 +240,12 @@ function stopSlideshow() {
 function slideShow(delta) {
   if (!slide || !slide.frames.length) return;
   slide.i = (slide.i + delta + slide.frames.length) % slide.frames.length;
+  if (slide.video) {
+    const media = document.querySelector(".lightbox-media");
+    const vv = media && media.querySelector(".video-viewer");
+    if (vv && vv._stop) vv._stop();
+    if (media) attachVideo(media, slide.frames[slide.i], { autoplay: true });
+  }
   const img = document.getElementById("lbImg");
   if (img) img.src = `/file?path=${encodeURIComponent(slide.frames[slide.i])}`;
   const pos = document.getElementById("lbSlidePos");
@@ -294,7 +302,7 @@ function renderLightbox(project) {
     </div>
     <div class="lightbox-media">
       <button class="lightbox-nav prev" id="lbPrev">‹</button>
-      ${item.kind === "video" ? ""
+      ${item.kind === "video" || (item.kind === "group" && isVideo(item.cover)) ? ""
         : `<img id="lbImg" src="/file?path=${encodeURIComponent(item.kind === "group" ? item.cover : item.path)}">`}
       <button class="lightbox-nav next" id="lbNext">›</button>
     </div>
@@ -322,7 +330,16 @@ function renderLightbox(project) {
     const media = lb.querySelector(".lightbox-media");
     attachVideo(media, item.path, { autoplay: true });
   }
-  if (item.kind === "group") startSlideshow(item);
+  if (item.kind === "group") {
+    if (isVideo(item.cover)) {
+      // A grouped video (an IG reel candidate) must play, not sit as a still.
+      const media = lb.querySelector(".lightbox-media");
+      attachVideo(media, item.members ? item.members[0] : item.cover, { autoplay: true });
+      slide = { frames: item.members || [], i: 0, timer: null, playing: false, video: true };
+    } else {
+      startSlideshow(item);
+    }
+  }
   lb._keyHandler = lb._keyHandler; // keep reference
   document.getElementById("lbClose").addEventListener("click", () => history.back());
   document.getElementById("lbPrev").addEventListener("click", () =>

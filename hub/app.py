@@ -12,6 +12,9 @@ from hub import safepath
 
 def create_app() -> Flask:
     app = Flask(__name__, static_folder=str(HUB_ROOT / "web"), static_url_path="/static")
+    # The UI is edited constantly and browsed from a phone; a cached gallery.js means a
+    # fix silently does not arrive. Local tool, so serving fresh costs nothing.
+    app.config["SEND_FILE_MAX_AGE_DEFAULT"] = 0
     auth.install(app)
     safepath.register_root(str(JOBS_DIR))
     safepath.register_root("~/.openclaw/workspace/_photos")   # read-only source pool (thumbs + action sources)
