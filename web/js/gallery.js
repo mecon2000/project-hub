@@ -171,6 +171,13 @@ function sidecarInfoHtml(item) {
     ? "📷 camera JPEG (unedited)" : sc.source_kind);
   if (sc.consent_rule) bits.push(`consent: ${sc.consent_rule}`);
   if (sc.vote) bits.push(sc.vote === "good" ? "👍" : "👎");
+  if (sc.sfw) bits.push(`<span class="muted">${sc.sfw}</span>`);
+  if (sc.caption) bits.push(`<span class="muted">"${sc.caption.slice(0, 90)}${sc.caption.length > 90 ? "…" : ""}"</span>`);
+  if (Array.isArray(sc.hooks) && sc.hooks.length) {
+    // Alternative hooks are a choice to make while looking at the reel, so they belong
+    // on the card rather than only in the .txt beside it.
+    bits.push(`<span class="muted">hooks: ${sc.hooks.map((h) => `<code>${h}</code>`).join(" · ")}</span>`);
+  }
   if (sc.lr_keywords) {
     const kw = String(sc.lr_keywords).replace(/[\[\]"]/g, "");
     bits.push(`<span class="muted">${kw.slice(0, 80)}${kw.length > 80 ? "…" : ""}</span>`);
