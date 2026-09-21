@@ -1,0 +1,14 @@
+# Throwaway: exercises the generic review bar + hold-to-reveal compare. Delete when done.
+name: review-test
+label: "Review test (throwaway)"
+content:
+  root: ~/.openclaw/workspace/shared/hub-review-test
+  areas:
+    after:
+      dir: after
+      media: [photo]
+      review: {contract: "After must keep the face and rope as in Before; hold the image to see Before."}
+      compare_with: before
+    before:
+      dir: before
+      media: [photo]

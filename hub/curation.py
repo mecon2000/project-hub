@@ -15,7 +15,7 @@ from pathlib import Path
 
 from flask import Blueprint, jsonify, request
 
-from hub import manifests, safepath
+from hub import manifests, safepath, verdicts
 from hub.jobs import store
 
 bp = Blueprint("curation", __name__)
@@ -139,7 +139,7 @@ def vote(name):
     body = request.json or {}
     path = safepath.resolve_safe(body.get("path", ""))
     v = body.get("vote", "")
-    if v not in ("fav", "good", "bad", "blacklist-model"):
+    if v not in ("fav", "blacklist-model") + verdicts.VERDICTS:
         return jsonify({"error": f"unknown vote {v!r}"}), 400
     if v == "blacklist-model":
         model = (body.get("model") or "").strip()
@@ -170,12 +170,15 @@ def vote(name):
             return jsonify({"ok": True, "count": len(members),
                             "entry": _fav_group(proj, path, members)})
         stamp = time.strftime("%Y-%m-%d %H:%M:%S")
+        verdicts.record(name, body.get("area"), path, v, body.get("note", ""))
         for m in members:
-            _sidecar_update(m, {"vote": v, "voted_at": stamp})
+            _sidecar_update(m, {"vote": v, "voted_at": stamp, "vote_note": body.get("note", "")})
         return jsonify({"ok": True, "vote": v, "count": len(members)})
     if not path or not os.path.isfile(path):
         return jsonify({"error": "bad path"}), 400
     if v == "fav":
         return jsonify({"ok": True, "entry": _fav(proj, path)})
-    _sidecar_update(path, {"vote": v, "voted_at": time.strftime("%Y-%m-%d %H:%M:%S")})
+    verdicts.record(name, body.get("area"), path, v, body.get("note", ""), body.get("mark"))
+    _sidecar_update(path, {"vote": v, "voted_at": time.strftime("%Y-%m-%d %H:%M:%S"),
+                           "vote_note": body.get("note", ""), "vote_mark": body.get("mark")})
     return jsonify({"ok": True, "vote": v})

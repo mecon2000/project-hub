@@ -335,3 +335,23 @@ table.db-table tbody tr:hover { background: rgba(255,255,255,0.03); }
   border-radius: 8px; padding: 10px; font: inherit; margin-bottom: 8px;
 }
 .line-actions { margin-top: 10px; }
+
+/* review bar (areas with manifest `review:`) */
+.review-bar { margin: 8px 0; padding: 0 14px; display: flex; flex-direction: column; gap: 6px; }
+.review-btns { display: flex; flex-wrap: wrap; gap: 8px; }
+.review-btns .btn.ok { background: var(--ok); color: #041018; }
+.review-btns .btn.active { outline: 2px solid var(--text); }
+.review-bar textarea { background: var(--card); color: var(--text); border: 1px solid var(--border);
+  border-radius: 8px; padding: 8px; font: inherit; }
+.review-contract { font-size: 0.9em; }
+.lightbox-media { position: relative; }
+.review-dot { position: absolute; width: 22px; height: 22px; margin: -11px 0 0 -11px;
+  border: 3px solid #ff2d55; border-radius: 50%; pointer-events: none; box-shadow: 0 0 0 2px #000a; }
+
+/* hold-to-reveal (areas with manifest `compare_with:`) */
+.reveal-top, .reveal-under { -webkit-touch-callout: none; user-select: none; -webkit-user-select: none; }
+.reveal-under { position: absolute; object-fit: contain; pointer-events: none; z-index: 2; }
+.reveal-badge { position: absolute; top: 8px; left: 50%; transform: translateX(-50%); z-index: 3;
+  background: #000a; color: var(--text); padding: 3px 10px; border-radius: 12px; font-size: 0.85em;
+  pointer-events: none; }
+.reveal-badge.on { background: var(--accent); color: #041018; font-weight: 600; }

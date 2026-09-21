@@ -30,7 +30,9 @@ def projects():
             "areas": {a: {"media": v.get("media", []),
                           "hidden": v.get("hidden_by_default", False),
                           "triage": v.get("triage", False),
-                          "link_template": v.get("link_template")}
+                          "link_template": v.get("link_template"),
+                          "review": v.get("review", False),
+                          "compare_with": v.get("compare_with")}
                       for a, v in p.get("content", {}).get("areas", {}).items()
                       if v.get("listed", True)},
             "links": p.get("links", {}),

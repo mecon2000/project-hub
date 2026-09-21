@@ -33,6 +33,19 @@ CREATE TABLE IF NOT EXISTS schedules (
     source_glob TEXT NOT NULL DEFAULT '',
     enabled INTEGER NOT NULL DEFAULT 1
 );
+CREATE TABLE IF NOT EXISTS verdicts (  -- append-only history; the sidecar holds the latest
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    project TEXT NOT NULL,
+    area TEXT,
+    path TEXT NOT NULL,
+    verdict TEXT NOT NULL,             -- good | bad | unsure
+    note TEXT NOT NULL DEFAULT '',
+    mark_x REAL,                       -- 0..1 of image width, optional spot
+    mark_y REAL,
+    at REAL NOT NULL
+);
+CREATE INDEX IF NOT EXISTS verdicts_path ON verdicts(path);
+CREATE INDEX IF NOT EXISTS verdicts_area ON verdicts(project, area);
 """
 
 

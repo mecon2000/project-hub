@@ -1,6 +1,8 @@
 import { state, api, el, toast, humanSize, relTime, setHash } from "./app.js";
 import { attachVideo } from "./viewer.js";
 import { openCompare } from "./compare.js";
+import { reviewEnabled, attachReview } from "./review.js";
+import { attachHoldReveal } from "./holdreveal.js";
 
 const PAGE = 60;
 let items = [];
@@ -170,7 +172,7 @@ function sidecarInfoHtml(item) {
   if (sc.source_kind) bits.push(String(sc.source_kind).startsWith("camera_jpeg")
     ? "📷 camera JPEG (unedited)" : sc.source_kind);
   if (sc.consent_rule) bits.push(`consent: ${sc.consent_rule}`);
-  if (sc.vote) bits.push(sc.vote === "good" ? "👍" : "👎");
+  if (sc.vote) bits.push({ good: "👍", bad: "👎", unsure: "❓" }[sc.vote] + (sc.vote_note ? ` <span class="muted">${sc.vote_note}</span>` : ""));
   if (sc.sfw) bits.push(`<span class="muted">${sc.sfw}</span>`);
   if (sc.caption) bits.push(`<span class="muted">"${sc.caption.slice(0, 90)}${sc.caption.length > 90 ? "…" : ""}"</span>`);
   if (Array.isArray(sc.hooks) && sc.hooks.length) {
@@ -333,6 +335,8 @@ function renderLightbox(project) {
     ${item.sidecar && item.sidecar.queued_to_sp
       ? `<div class="muted lightbox-ig-note">📤 queued to IG: ${item.sidecar.queued_to_sp.map((q) => `${q.account} ${q.type}`).join(", ")}</div>` : ""}
   `;
+  if (reviewEnabled(project, curArea)) attachReview(lb, project, item, curArea, () => renderGrid(project));
+  attachHoldReveal(lb, project, item, curArea);
   if (item.kind === "video") {
     const media = lb.querySelector(".lightbox-media");
     attachVideo(media, item.path, { autoplay: true });
