@@ -3,6 +3,7 @@ import { attachVideo } from "./viewer.js";
 import { openCompare } from "./compare.js";
 import { reviewEnabled, attachReview } from "./review.js";
 import { attachHoldReveal } from "./holdreveal.js";
+import { pickEnabled, attachPick } from "./pick.js";
 
 const PAGE = 60;
 let items = [];
@@ -341,7 +342,9 @@ function renderLightbox(project) {
     const media = lb.querySelector(".lightbox-media");
     attachVideo(media, item.path, { autoplay: true });
   }
-  if (item.kind === "group") {
+  const picking = pickEnabled(project, curArea, item);
+  if (picking) attachPick(lb, project, item, curArea, () => renderGrid(project));
+  if (item.kind === "group" && !picking) {
     if (isVideo(item.cover)) {
       // A grouped video (an IG reel candidate) must play, not sit as a still.
       const media = lb.querySelector(".lightbox-media");
@@ -354,9 +357,9 @@ function renderLightbox(project) {
   lb._keyHandler = lb._keyHandler; // keep reference
   document.getElementById("lbClose").addEventListener("click", () => history.back());
   document.getElementById("lbPrev").addEventListener("click", () =>
-    item.kind === "group" ? slideStep(-1) : nav(project, -1));
+    item.kind === "group" && !picking ? slideStep(-1) : nav(project, -1));
   document.getElementById("lbNext").addEventListener("click", () =>
-    item.kind === "group" ? slideStep(1) : nav(project, 1));
+    item.kind === "group" && !picking ? slideStep(1) : nav(project, 1));
   document.getElementById("lbRunAction").addEventListener("click", () => {
     if (!state.selection.some((s) => s.path === item.path)) state.selection.push(item);
     if (hasSourceActions(project)) setHash({ tab: "actions" });

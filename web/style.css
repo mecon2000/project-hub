@@ -355,3 +355,13 @@ table.db-table tbody tr:hover { background: rgba(255,255,255,0.03); }
   background: #000a; color: var(--text); padding: 3px 10px; border-radius: 12px; font-size: 0.85em;
   pointer-events: none; }
 .reveal-badge.on { background: var(--accent); color: #041018; font-weight: 600; }
+
+/* best-of-N pick (areas with manifest `pick: true`) */
+.pick-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; width: 100%; height: 100%; padding: 6px; box-sizing: border-box; }
+.pick-grid.n5, .pick-grid.n6, .pick-grid.n7, .pick-grid.n8, .pick-grid.n9 { grid-template-columns: 1fr 1fr 1fr; }
+.pick-cell { border: 3px solid transparent; border-radius: 8px; overflow: hidden; display: flex; min-height: 0; }
+.pick-cell img { width: 100%; height: 100%; object-fit: contain; user-select: none; -webkit-touch-callout: none; }
+.pick-cell.sel { border-color: var(--accent); }
+.pick-big { position: absolute; inset: 0; background: #000; z-index: 4; display: flex; }
+.pick-big img { width: 100%; height: 100%; object-fit: contain; }
+.pick-row { display: flex; align-items: center; gap: 10px; padding: 8px 14px 0; }

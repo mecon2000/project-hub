@@ -46,6 +46,15 @@ CREATE TABLE IF NOT EXISTS verdicts (  -- append-only history; the sidecar holds
 );
 CREATE INDEX IF NOT EXISTS verdicts_path ON verdicts(path);
 CREATE INDEX IF NOT EXISTS verdicts_area ON verdicts(project, area);
+CREATE TABLE IF NOT EXISTS picks (     -- best-of-N choices: chosen beats every rejected
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    project TEXT NOT NULL,
+    area TEXT,
+    group_path TEXT NOT NULL,
+    chosen TEXT NOT NULL,
+    rejected TEXT NOT NULL DEFAULT '[]',
+    at REAL NOT NULL
+);
 """
 
 

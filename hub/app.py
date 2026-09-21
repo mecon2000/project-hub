@@ -6,6 +6,7 @@ from hub.config import HUB_PORT, HUB_ROOT, JOBS_DIR
 from hub.curation import bp as curation_bp
 from hub.verdicts import bp as verdicts_bp
 from hub.pairs import bp as pairs_bp
+from hub.picks import bp as picks_bp
 from hub.dbviews import bp as dbviews_bp
 from hub.media.routes import bp as media_bp
 from hub.views import bp as views_bp
@@ -33,6 +34,7 @@ def create_app() -> Flask:
     app.register_blueprint(curation_bp)
     app.register_blueprint(verdicts_bp)
     app.register_blueprint(pairs_bp)
+    app.register_blueprint(picks_bp)
     try:                                    # project-specific ext (plan-sanctioned exception)
         from hub.ext.social_publisher import bp as sp_bp
         app.register_blueprint(sp_bp)

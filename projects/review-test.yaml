@@ -12,3 +12,8 @@ content:
     before:
       dir: before
       media: [photo]
+    picks:
+      dir: picks
+      media: [photo]
+      group_by: dir
+      pick: true
