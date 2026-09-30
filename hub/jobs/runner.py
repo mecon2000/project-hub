@@ -77,6 +77,27 @@ def _collect_outputs(out_dir: str, project: dict, action: dict) -> list[str]:
         return produced                       # no declared output area: leave in job dir
     dest_dir = areas[area_name]["abs_dir"]
     final = []
+    if action.get("keep_subdirs"):
+        # Tools that emit one folder per result (a reel + its variants) keep that
+        # folder, so a group_by: dir area shows it as one card. Never clobber.
+        for entry in sorted(os.listdir(out_dir)):
+            src = os.path.join(out_dir, entry)
+            dest = os.path.join(dest_dir, entry)
+            if os.path.exists(dest):
+                stem, ext = os.path.splitext(entry)
+                dest = os.path.join(dest_dir, f"{stem}_{int(time.time())}{ext}")
+            if os.path.isdir(src):              # no copytree: its copystat EPERMs on drvfs
+                for root, _dirs, files in os.walk(src):
+                    target = os.path.normpath(os.path.join(dest, os.path.relpath(root, src)))
+                    os.makedirs(target, exist_ok=True)
+                    for f in files:
+                        _move_no_meta(os.path.join(root, f), os.path.join(target, f))
+                        final.append(os.path.join(target, f))
+                shutil.rmtree(src, ignore_errors=True)
+            else:
+                _move_no_meta(src, dest)
+                final.append(dest)
+        return final
     for src in produced:
         dest = os.path.join(dest_dir, os.path.basename(src))
         if os.path.exists(dest):              # never clobber
