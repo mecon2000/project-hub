@@ -141,12 +141,14 @@ flowchart LR
 
 ## 7. Review boards (`annotate:`)
 
-An area with `annotate:` shows a board instead of the thumb grid: one card per item (a
-`group_by: dir` folder = one piece with several images), an ⓘ panel from the folder's
-`meta.json`, verdict chips, and **✎ Edit**: tap the picture to drop numbered pins, each
-with its own text, plus a general note. Notes are saved next to the item
-(`<folder>/notes.json`), so a repo-backed area carries them in git. **Send notes** stamps
-them as sent and runs the area's `submit_action` (laser-art: commit + push).
+Take One's review room, for stills: an area with `annotate:` shows a board instead of the
+thumb grid. One card per item (a `group_by: dir` folder = one piece with several images),
+an ⓘ panel from the folder's `meta.json`, verdict chips, and **✎ Notes**: tap the picture to
+pin, write, Save note. Each note is saved at once with a snapshot (pin drawn in) and can be
+marked ✓ done when the next round answers it. Notes live next to the item
+(`<folder>/notes.json`, snapshots in `<folder>/_notes/`), so a repo-backed area carries them
+in git. **Send notes** stamps them as sent and runs the area's `submit_action`
+(laser-art: commit + push, so Claude reads them from GitHub).
 
 ```yaml
 areas:
@@ -157,5 +159,5 @@ areas:
     annotate:
       verdicts: [keep, drop]
       submit_action: send-notes
-      hint: "shown under the board"
+      hint: "shown with the Send bar"
 ```

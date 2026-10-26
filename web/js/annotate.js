@@ -2,8 +2,8 @@ import { api, el, toast, setHash } from "./app.js";
 
 // Review board for areas whose manifest sets `annotate:`. One card per item (usually a
 // group dir = one piece with several images). Each card: image switcher, ⓘ metadata
-// (from <group>/meta.json), verdict chips, and Edit → a full-screen editor where taps on
-// the image drop numbered pins, each with its own text, plus a general note.
+// (from <group>/meta.json), verdict chips, and Notes → Take One's review-room flow on a still:
+// tap the picture to pin, write, Save note (snapshot with the pin drawn in); ✓ done / ✕ delete.
 // "Send notes" stamps them as sent and runs the area's submit_action.
 
 const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
@@ -20,8 +20,7 @@ function cfgOf(project, area) {
   return typeof a === "object" && a ? a : {};
 }
 
-const unsent = (n) => !!(n && (n.updated_at || 0) > (n.sent_at || 0) &&
-  (n.verdict || (n.note || "").trim() || (n.pins || []).length));
+const unsent = (n) => !!(n && (n.updated_at || 0) > (n.sent_at || 0));
 
 export async function renderBoard(host, project, area) {
   const cfg = cfgOf(project, area);
@@ -58,7 +57,8 @@ export async function renderBoard(host, project, area) {
     let cur = it._cur || imgs[0];
     const meta = it.meta || {};
     const title = meta.title || it.name;
-    const pins = n.pins || [];
+    const ns = n.notes || [];
+    const open = ns.filter((x) => !x.done).length;
     const card = el(`<article class="ann-card ${n.verdict ? "v-" + esc(n.verdict) : ""}">
       <div class="ann-shot"><img loading="lazy" alt="${esc(title)}"></div>
       <div class="ann-body">
@@ -71,10 +71,10 @@ export async function renderBoard(host, project, area) {
           .map(([k, v]) => `<div><span>${esc(k.replace(/_/g, " "))}</span><b>${esc(typeof v === "object" ? JSON.stringify(v) : v)}</b></div>`).join("")}</div>
         ${imgs.length > 1 ? `<div class="ann-views">${imgs.map((p) =>
           `<button class="ann-view ${p === cur ? "on" : ""}" data-p="${esc(p)}">${esc(imgLabel(p))}</button>`).join("")}</div>` : ""}
-        ${(n.note || pins.length) ? `<div class="ann-preview">${pins.length ? `<span class="ann-pinct">📍${pins.length}</span>` : ""}${esc((n.note || pins.map((p) => p.text).join(" · ")).slice(0, 140))}</div>` : ""}
+        ${ns.length ? `<div class="ann-preview" dir="auto"><span class="ann-pinct">${ns.length} note${ns.length > 1 ? "s" : ""}${open < ns.length ? ` · ${open} open` : ""}</span>${esc(ns.filter((x) => !x.done).map((x) => x.text).join(" · ").slice(0, 140))}</div>` : ""}
         <div class="ann-actions">
           ${verdicts.map((v) => `<button class="ann-v ${n.verdict === v ? "on" : ""}" data-v="${esc(v)}">${esc(v)}</button>`).join("")}
-          <button class="ann-edit">✎ Edit${unsent(n) ? " •" : ""}</button>
+          <button class="ann-edit">✎ Notes${unsent(n) ? " •" : ""}</button>
         </div>
       </div>
     </article>`);
@@ -99,7 +99,7 @@ export async function renderBoard(host, project, area) {
       try {
         const r = await api(`/api/p/${project.name}/notes`, {
           method: "POST", headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ area, path: it.path, verdict: v }),
+          body: JSON.stringify({ area, path: it.path, op: "verdict", verdict: v }),
         });
         it.notes = r.notes; redraw(i); tally();
       } catch (e) { /* toasted */ }
@@ -134,69 +134,88 @@ export async function renderBoard(host, project, area) {
 }
 
 // ---------------------------------------------------------------- editor
-function openEditor(project, area, it, imgs, start, title, onSaved) {
-  const n = it.notes || {};
-  let pins = (n.pins || []).map((p) => ({ ...p }));
-  let cur = start;
-  const resolveImg = (p) => imgs.find((m) => base(m) === p.img) || imgs[0];
-  const ov = el(`<div class="ann-editor" role="dialog" aria-label="Edit notes">
+// The Take One review-room flow, on a still: tap the picture to pin, write, Save note.
+// Each note is saved at once with a snapshot (pin drawn in); ✓ marks it done, ✕ removes it.
+function openEditor(project, area, it, imgs, start, title, onChanged) {
+  let d = it.notes || { notes: [] };
+  let cur = start, pin = null, mode = "pin", focus = null;
+  const dir = it.kind === "group" ? it.path : it.path.replace(/\/[^/]*$/, "");
+  const imgFor = (n) => imgs.find((m) => base(m) === n.img) || imgs[0];
+  const ov = el(`<div class="ann-editor" role="dialog" aria-label="Notes">
     <div class="ann-ed-top">
       <button class="ann-ed-close" aria-label="Close">✕</button>
       <div class="ann-ed-title">${esc(title)}</div>
-      <button class="btn" id="annSave">Save</button>
     </div>
-    <div class="ann-ed-scroll">
-      ${imgs.length > 1 ? `<div class="ann-views ann-ed-views"></div>` : ""}
-      <div class="ann-stage"><div class="ann-frame"><img alt=""><div class="ann-pins"></div></div></div>
-      <div class="ann-ed-hint muted">Tap the picture to drop a pin, then say what to change there.</div>
-      <ol class="ann-pinlist"></ol>
-      <label class="ann-label" for="annNote">General note</label>
-      <textarea id="annNote" rows="4" placeholder="What should change overall?">${esc(n.note || "")}</textarea>
+    <div class="ann-ed-body">
+      <section class="ann-ed-left">
+        ${imgs.length > 1 ? `<div class="ann-views ann-ed-views"></div>` : ""}
+        <div class="ann-stage"><div class="ann-frame"><img alt=""><div class="ann-pins"></div></div></div>
+        <div class="ann-ed-hint muted">Tap the picture to pin a note to that spot.</div>
+      </section>
+      <aside class="ann-ed-right">
+        <div class="ann-compose">
+          <div class="ann-where"></div>
+          <textarea id="annText" dir="auto" rows="3" placeholder="What should change?"></textarea>
+          <div class="ann-row">
+            <button class="btn" id="annAdd">Save note</button>
+            <button class="btn secondary" id="annWhole">Note on the whole piece</button>
+          </div>
+        </div>
+        <div class="ann-list"></div>
+      </aside>
     </div>
   </div>`);
   document.body.appendChild(ov);
   document.body.classList.add("ann-lock");
   const img = ov.querySelector(".ann-frame img"), layer = ov.querySelector(".ann-pins");
-  const list = ov.querySelector(".ann-pinlist"), views = ov.querySelector(".ann-ed-views");
+  const views = ov.querySelector(".ann-ed-views"), list = ov.querySelector(".ann-list");
+  const where = ov.querySelector(".ann-where"), text = ov.querySelector("#annText");
 
+  const setWhere = () => {
+    where.textContent = mode === "whole" ? "Note on the whole piece"
+      : pin ? `Pinned on ${imgLabel(cur)}` : "Tap the picture, or write a note on the whole piece.";
+  };
   const drawViews = () => {
     if (!views) return;
     views.innerHTML = imgs.map((p) => {
-      const c = pins.filter((q) => resolveImg(q) === p).length;
-      return `<button class="ann-view ${p === cur ? "on" : ""}" data-p="${esc(p)}">${esc(imgLabel(p))}${c ? ` 📍${c}` : ""}</button>`;
+      const c = d.notes.filter((q) => q.x != null && imgFor(q) === p && !q.done).length;
+      return `<button class="ann-view ${p === cur ? "on" : ""}" data-p="${esc(p)}">${esc(imgLabel(p))}${c ? ` · ${c}` : ""}</button>`;
     }).join("");
-    views.querySelectorAll(".ann-view").forEach((b) => b.addEventListener("click", () => { cur = b.dataset.p; draw(); }));
+    views.querySelectorAll(".ann-view").forEach((b) => b.addEventListener("click", () => {
+      cur = b.dataset.p; pin = null; if (mode === "pin") setWhere(); draw();
+    }));
   };
   const drawPins = () => {
     layer.innerHTML = "";
-    pins.forEach((p, k) => {
-      if (resolveImg(p) !== cur) return;
-      const d = el(`<button class="ann-pin" style="left:${p.x * 100}%;top:${p.y * 100}%">${k + 1}</button>`);
-      d.addEventListener("click", (e) => { e.stopPropagation(); focusPin(k); });
-      layer.appendChild(d);
+    d.notes.forEach((n, k) => {
+      if (n.x == null || imgFor(n) !== cur) return;
+      layer.appendChild(el(`<div class="ann-pin old ${n.done ? "done" : ""} ${focus === n.id ? "focus" : ""}" style="left:${n.x * 100}%;top:${n.y * 100}%">${k + 1}</div>`));
     });
-  };
-  const focusPin = (k) => {
-    const ta = list.querySelector(`[data-k="${k}"] textarea`);
-    if (ta) { ta.scrollIntoView({ block: "center", behavior: "smooth" }); ta.focus({ preventScroll: true }); }
+    if (pin) layer.appendChild(el(`<div class="ann-pin new" style="left:${pin.x * 100}%;top:${pin.y * 100}%"></div>`));
   };
   const drawList = () => {
-    list.innerHTML = "";
-    pins.forEach((p, k) => {
-      const li = el(`<li data-k="${k}">
-        <div class="ann-pinrow">
-          <button class="ann-pinbadge" title="Show on picture">${k + 1}</button>
-          <span class="muted">${esc(imgLabel(resolveImg(p)))}</span>
-          <button class="ann-pindel" aria-label="Remove pin ${k + 1}">✕</button>
+    list.innerHTML = d.notes.length ? "" : `<div class="muted ann-empty">No notes on this piece yet.</div>`;
+    d.notes.forEach((n, k) => {
+      const shot = n.shot ? `/file?path=${encodeURIComponent(dir + "/" + n.shot)}` : null;
+      const row = el(`<div class="ann-note ${n.done ? "done" : ""}">
+        ${shot ? `<img src="${shot}" alt="" loading="lazy">` : `<div class="ann-noshot">whole<br>piece</div>`}
+        <div class="ann-note-body">
+          <div class="ann-note-meta"><b>${k + 1}</b> · ${n.x != null ? esc(imgLabel(imgFor(n))) : "whole piece"}</div>
+          <p dir="auto">${esc(n.text)}</p>
+          <div class="ann-note-acts">
+            <button data-a="done">${n.done ? "↺ reopen" : "✓ done"}</button>
+            <button data-a="del">✕ delete</button>
+          </div>
         </div>
-        <textarea rows="2" placeholder="What should change here?">${esc(p.text)}</textarea>
-      </li>`);
-      li.querySelector("textarea").addEventListener("input", (e) => { p.text = e.target.value; });
-      li.querySelector(".ann-pinbadge").addEventListener("click", () => {
-        cur = resolveImg(p); draw(); ov.querySelector(".ann-stage").scrollIntoView({ behavior: "smooth" });
+      </div>`);
+      const show = () => { if (n.x == null) return; cur = imgFor(n); focus = n.id; draw(); ov.querySelector(".ann-stage").scrollIntoView({ behavior: "smooth", block: "nearest" }); };
+      row.querySelector("img")?.addEventListener("click", show);
+      row.querySelector(".ann-note-meta").addEventListener("click", show);
+      row.querySelector('[data-a="done"]').addEventListener("click", () => send({ op: "update", id: n.id, done: !n.done }));
+      row.querySelector('[data-a="del"]').addEventListener("click", () => {
+        if (window.confirm(`Delete note ${k + 1}?`)) send({ op: "delete", id: n.id });
       });
-      li.querySelector(".ann-pindel").addEventListener("click", () => { pins.splice(k, 1); draw(); });
-      list.appendChild(li);
+      list.appendChild(row);
     });
   };
   const draw = () => {
@@ -204,36 +223,49 @@ function openEditor(project, area, it, imgs, start, title, onSaved) {
     if (img.getAttribute("src") !== src) img.setAttribute("src", src);
     drawViews(); drawPins(); drawList();
   };
-  img.addEventListener("click", (e) => {
-    const r = img.getBoundingClientRect();
-    pins.push({ img: base(cur), x: (e.clientX - r.left) / r.width, y: (e.clientY - r.top) / r.height, text: "" });
-    draw();
-    focusPin(pins.length - 1);
-  });
-
-  const close = () => { ov.remove(); document.body.classList.remove("ann-lock"); document.removeEventListener("keydown", onKey); };
-  const dirty = () => JSON.stringify(pins) !== JSON.stringify(n.pins || []) ||
-    ov.querySelector("#annNote").value !== (n.note || "");
-  const onKey = (e) => { if (e.key === "Escape") tryClose(); };
-  const tryClose = () => {
-    if (dirty() && !window.confirm("Discard the changes you made here?")) return;
-    close();
-  };
-  document.addEventListener("keydown", onKey);
-  ov.querySelector(".ann-ed-close").addEventListener("click", tryClose);
-  ov.querySelector("#annSave").addEventListener("click", async () => {
+  const send = async (body) => {
     try {
       const r = await api(`/api/p/${project.name}/notes`, {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ area, path: it.path, note: ov.querySelector("#annNote").value,
-          pins }),
+        body: JSON.stringify({ area, path: it.path, ...body }),
       });
-      it.notes = r.notes;
-      it._cur = cur;
-      toast("Saved");
-      close();
-      onSaved && onSaved();
-    } catch (e) { /* toasted */ }
+      d = it.notes = r.notes;
+      draw(); onChanged && onChanged();
+      return true;
+    } catch (e) { return false; }
+  };
+  // snapshot of the picture with the pin drawn in, so a note reads on its own later
+  const snapshot = () => {
+    try {
+      const k = Math.min(1, 900 / img.naturalWidth), W = Math.round(img.naturalWidth * k), H = Math.round(img.naturalHeight * k);
+      const c = document.createElement("canvas"); c.width = W; c.height = H;
+      const g = c.getContext("2d"); g.drawImage(img, 0, 0, W, H);
+      if (pin) { g.lineWidth = 5; g.strokeStyle = "#fff"; g.fillStyle = "#d97757"; g.beginPath(); g.arc(pin.x * W, pin.y * H, 15, 0, 7); g.fill(); g.stroke(); }
+      return c.toDataURL("image/jpeg", 0.85);
+    } catch (e) { return null; }
+  };
+
+  img.addEventListener("click", (e) => {
+    const r = img.getBoundingClientRect();
+    pin = { x: (e.clientX - r.left) / r.width, y: (e.clientY - r.top) / r.height };
+    mode = "pin"; focus = null; setWhere(); drawPins();
+    text.focus({ preventScroll: true });
+    if (matchMedia("(max-width: 899px)").matches) text.scrollIntoView({ behavior: "smooth", block: "center" });
   });
-  draw();
+  ov.querySelector("#annWhole").addEventListener("click", () => { mode = "whole"; pin = null; setWhere(); drawPins(); text.focus(); });
+  ov.querySelector("#annAdd").addEventListener("click", async () => {
+    const t = text.value.trim();
+    if (!t) { text.focus(); return; }
+    const body = { op: "add", text: t };
+    if (mode !== "whole" && pin) Object.assign(body, { img: base(cur), x: pin.x, y: pin.y, shot: snapshot() });
+    if (await send(body)) { text.value = ""; pin = null; mode = "pin"; setWhere(); drawPins(); toast("Note saved"); }
+  });
+  const close = () => {
+    if (text.value.trim() && !window.confirm("Discard the note you are writing?")) return;
+    ov.remove(); document.body.classList.remove("ann-lock"); document.removeEventListener("keydown", onKey);
+  };
+  const onKey = (e) => { if (e.key === "Escape") close(); };
+  document.addEventListener("keydown", onKey);
+  ov.querySelector(".ann-ed-close").addEventListener("click", close);
+  setWhere(); draw();
 }
