@@ -4,6 +4,7 @@ import { openCompare } from "./compare.js";
 import { reviewEnabled, attachReview } from "./review.js";
 import { attachHoldReveal } from "./holdreveal.js";
 import { pickEnabled, attachPick } from "./pick.js";
+import { annotateEnabled, renderBoard } from "./annotate.js";
 
 const PAGE = 60;
 let items = [];
@@ -75,7 +76,15 @@ export function renderGallery(view, project, opts = {}) {
 
 async function loadArea(project) {
   offset = 0; items = []; total = 0;
-  document.getElementById("galGrid").innerHTML = "";
+  const grid = document.getElementById("galGrid");
+  grid.innerHTML = "";
+  grid.className = "gallery-grid";
+  if (!onPick && annotateEnabled(project, curArea)) {      // review board instead of the thumb grid
+    document.getElementById("loadMoreBtn").classList.add("hidden");
+    document.getElementById("galStatus").textContent = "";
+    await renderBoard(grid, project, curArea);
+    return;
+  }
   await loadMore(project);
 }
 

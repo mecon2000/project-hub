@@ -96,7 +96,10 @@ def list_area(project: dict, area_name: str, offset: int = 0, limit: int = 60) -
     if area.get("group_by") == "dir":
         items = _group_by_dir(items, base)
 
-    items.sort(key=lambda x: x["mtime"], reverse=True)
+    if area.get("sort") == "name":         # numbered sets (review rounds) read in their own order
+        items.sort(key=lambda x: x["name"])
+    else:
+        items.sort(key=lambda x: x["mtime"], reverse=True)
     total = len(items)
     page = items[offset:offset + limit]
     for it in page:
@@ -110,4 +113,17 @@ def list_area(project: dict, area_name: str, offset: int = 0, limit: int = 60) -
                 except (OSError, ValueError):
                     pass
                 break
+        if area.get("annotate"):           # review boards: group meta.json + the item's notes
+            from hub.annotations import read_notes
+            if it["kind"] == "group":
+                mp = os.path.join(it["path"], "meta.json")
+                if os.path.isfile(mp):
+                    try:
+                        with open(mp) as f:
+                            it["meta"] = json.load(f)
+                    except (OSError, ValueError):
+                        pass
+            n = read_notes(it["path"])
+            if n:
+                it["notes"] = n
     return {"items": page, "total": total}
