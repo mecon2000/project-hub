@@ -13,7 +13,11 @@ notes in git:
 Manifest:
   areas.<a>.annotate:
     verdicts: [keep, drop]          # optional, default [keep, drop]
-    more_like_this: true            # optional: a "More like this" toggle per item (notes.json "more": true)
+    requests:                       # optional toggles per item, stored as notes.json "requests": {key: true}
+      - {key: more, label: "More like this"}
+      - {key: angles, label: "More angles"}
+  A verdict set by a tool (not by a person) carries "verdict_by": "<who>"; the board marks it, and a person's
+  click clears it.
     submit_action: send-notes       # optional, an action of the same project (no sources)
     hint: "..."                     # optional, shown with the Send bar
 """
@@ -76,7 +80,7 @@ def _num(v):
 
 @bp.post("/api/p/<name>/notes")
 def edit(name):
-    """op: verdict {verdict} | more {more} | add {img, x, y, text, shot} | update {id, text?, done?} | delete {id}"""
+    """op: verdict {verdict} | request {key, on} | add {img, x, y, text, shot} | update {id, text?, done?} | delete {id}"""
     proj = manifests.get(name)
     if not proj:
         return jsonify({"error": "no such project"}), 404
@@ -95,10 +99,18 @@ def edit(name):
         if v and v not in allowed:
             return jsonify({"error": f"verdict must be one of {allowed}"}), 400
         d["verdict"] = v
-    elif op == "more":                               # "more like this": ask for new variations of this item
-        if not _cfg(area).get("more_like_this"):
-            return jsonify({"error": "this area does not take 'more like this' requests"}), 400
-        d["more"] = bool(b.get("more"))
+        d.pop("verdict_by", None)                    # a person decided: no longer the tool's automatic verdict
+    elif op == "request":                            # e.g. "more like this", "more angles"
+        keys = [r.get("key") for r in _cfg(area).get("requests", []) if isinstance(r, dict)]
+        key = b.get("key")
+        if key not in keys:
+            return jsonify({"error": f"request must be one of {keys}"}), 400
+        reqs = {k: v for k, v in (d.get("requests") or {}).items() if v}
+        if b.get("on"):
+            reqs[key] = True
+        else:
+            reqs.pop(key, None)
+        d["requests"] = reqs
     elif op == "add":
         text = str(b.get("text") or "").strip()[:4000]
         if not text:
@@ -131,7 +143,7 @@ def edit(name):
             if isinstance(b.get("done"), bool):
                 n["done"] = b["done"]
     else:
-        return jsonify({"error": "op must be verdict, more, add, update or delete"}), 400
+        return jsonify({"error": "op must be verdict, request, add, update or delete"}), 400
     _write(item, d)
     return jsonify({"ok": True, "notes": d})
 

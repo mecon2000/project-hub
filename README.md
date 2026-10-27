@@ -147,7 +147,7 @@ an ⓘ panel from the folder's `meta.json`, verdict chips, and **✎ Notes**: ta
 pin, write, Save note. Each note is saved at once with a snapshot (pin drawn in) and can be
 marked ✓ done when the next round answers it. Notes live next to the item
 (`<folder>/notes.json`, snapshots in `<folder>/_notes/`), so a repo-backed area carries them
-in git. **Send notes** stamps them as sent and runs the area's `submit_action`
+in git. A verdict a tool set (`"verdict_by": "auto"` in notes.json) shows as "drop · auto" until you click. **Send notes** stamps them as sent and runs the area's `submit_action`
 (laser-art: commit + push, so Claude reads them from GitHub).
 
 ```yaml
@@ -158,7 +158,9 @@ areas:
     sort: name              # numbered folders in order instead of newest first
     annotate:
       verdicts: [keep, drop]
-      more_like_this: true    # "＋ More like this" toggle per item → notes.json "more": true
+      requests:               # toggles per item → notes.json "requests": {key: true}
+        - {key: more, label: "More like this"}
+        - {key: angles, label: "More angles"}
       submit_action: send-notes
       hint: "shown with the Send bar"
 ```
