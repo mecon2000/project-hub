@@ -96,6 +96,13 @@ def finish_job(job_id: str, status: str, rc: int, finished: float, outputs: list
         _db().commit()
 
 
+def delete_job(job_id: str) -> None:
+    """Forget a run that turned out to be a no-op (see the action's noop_exit)."""
+    with _lock:
+        _db().execute("DELETE FROM jobs WHERE id=?", (job_id,))
+        _db().commit()
+
+
 def get_job(job_id: str) -> dict | None:
     row = _db().execute("SELECT * FROM jobs WHERE id=?", (job_id,)).fetchone()
     return _rowdict(row) if row else None

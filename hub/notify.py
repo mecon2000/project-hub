@@ -32,11 +32,25 @@ def push(topic: str, title: str, message: str, click: str | None = None,
         requests.post(url, data=message.encode("utf-8"), headers=headers, timeout=15)
 
 
+def _news(proj: dict, project_name: str, news: dict) -> None:
+    """A script said what is new (HUB_NOTIFY lines): say exactly that, open the gallery."""
+    from hub import safepath
+    click = f"{HUB_PUBLIC_URL}/#p={quote(project_name)}&tab=gallery"
+    if news.get("area"):
+        click += f"&area={quote(news['area'])}"
+    img = safepath.resolve_safe(news.get("image", "")) if news.get("image") else None
+    push(_topic(project_name), f"{proj.get('label', project_name)}: {news['message']}",
+         news["message"], click,
+         attach_file=img if img and os.path.splitext(img)[1].lower() in IMAGE_EXT else None)
+
+
 def job_done(project_name: str, action_name: str, job_id: str,
-             status: str, outputs: list[str]) -> None:
+             status: str, outputs: list[str], news: dict | None = None) -> None:
     proj = manifests.get(project_name) or {}
     if proj.get("notify", {}).get("enabled", True) is False:
         return
+    if news and status == "done":
+        return _news(proj, project_name, news)
     action = proj.get("actions", {}).get(action_name, {})
     # housekeeping ticks (dispatcher, topups, reports) speak for themselves when
     # they have news — suppress their success pings, keep failure pings

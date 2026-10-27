@@ -164,3 +164,21 @@ areas:
       submit_action: send-notes
       hint: "shown with the Send bar"
 ```
+
+## 8. Hands-off updates (`schedules:`, `noop_exit`, `live:`)
+
+For projects that something else (Claude in the cloud, a CI) pushes to:
+
+- **Manifest schedules** — `schedules: [{id, cron, action, label}]` in `hub-project.yaml`. Re-synced every
+  minute (a pulled manifest change applies without a restart), shown read-only in the Schedules tab, and a
+  run is skipped while the previous one of the same action is still going.
+- **`noop_exit: <code>`** on an action — when the script exits with that code ("nothing new") the run is
+  forgotten: no job history, no ping. Pair with `quiet: true` for polls.
+- **News lines** — a script that prints `HUB_NOTIFY: <msg>` (optional `HUB_NOTIFY_AREA: <area>`,
+  `HUB_NOTIFY_IMAGE: <abs path inside an area>`) gets exactly that ping, opening the gallery on that area
+  with the image attached, even when the action is `quiet`.
+- **`lock: <name>`** on actions — actions sharing a lock run one at a time (e.g. everything touching one git
+  checkout).
+- **`live: true`** on a project — the open page polls `/api/p/<name>/version` every 20 s (and when the tab
+  comes back into view) and re-renders in place when a new area or new media appears; it waits while an
+  editor/lightbox is open or you are typing. Without `live`, only new/removed areas are noticed.

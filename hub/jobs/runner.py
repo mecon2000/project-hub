@@ -18,14 +18,36 @@ from hub.jobs import store
 MEDIA_EXT = {".jpg", ".jpeg", ".png", ".webp", ".gif", ".mp4", ".webm", ".mov", ".mkv", ".json"}
 
 # GPU-heavy actions declare serialize: true in their manifest — one at a time.
+# Actions that touch the same thing (e.g. a git checkout) share `lock: <name>`.
 _serial_locks: dict[str, threading.Lock] = {}
 _serial_guard = threading.Lock()
+_active: dict[tuple, int] = {}     # (project, action) -> runs in flight (in-memory: a restart clears it)
 
 
-def _serial_lock(project: str, action: str) -> threading.Lock:
-    key = f"{project}:{action}"
+def _serial_lock(project: str, key: str) -> threading.Lock:
+    key = f"{project}:{key}"
     with _serial_guard:
         return _serial_locks.setdefault(key, threading.Lock())
+
+
+def is_active(project: str, action: str) -> bool:
+    return _active.get((project, action), 0) > 0
+
+
+def _news_from_log(log_path: str) -> dict:
+    """Scripts announce real news with `HUB_NOTIFY: <msg>` (+ optional HUB_NOTIFY_AREA / HUB_NOTIFY_IMAGE)
+    lines; the push then says that and opens the gallery instead of the job log."""
+    news = {}
+    try:
+        with open(log_path, errors="replace") as f:
+            for line in f:
+                for key, field in (("HUB_NOTIFY:", "message"), ("HUB_NOTIFY_AREA:", "area"),
+                                   ("HUB_NOTIFY_IMAGE:", "image")):
+                    if line.startswith(key):
+                        news[field] = line[len(key):].strip()
+    except OSError:
+        pass
+    return news if news.get("message") else {}
 
 
 def _trim_segment(src: str, start: float, end: float, dest: str, log) -> str:
@@ -121,21 +143,30 @@ def start_job(project_name: str, action_name: str, argv_builder,
     log_path = str(job_dir / "log.txt")
 
     proj = manifests.get(project_name) or {}
-    serialize = bool(proj.get("actions", {}).get(action_name, {}).get("serialize"))
+    act = proj.get("actions", {}).get(action_name, {})
+    lock_key = act.get("lock") or (action_name if act.get("serialize") else None)
 
     job = {"id": job_id, "project": project_name, "action": action_name,
            "argv": argv_builder(str(out_dir), sources), "sources": sources,
            "status": "running", "started": time.time(), "log_path": log_path}
     store.insert_job(job)
 
+    _active[(project_name, action_name)] = _active.get((project_name, action_name), 0) + 1
+
     def _run():
+        try:
+            _run_inner()
+        finally:
+            _active[(project_name, action_name)] -= 1
+
+    def _run_inner():
         rc = -1
         try:
             with open(log_path, "w", buffering=1) as log:
-                lock = _serial_lock(project_name, action_name) if serialize else None
+                lock = _serial_lock(project_name, lock_key) if lock_key else None
                 if lock and not lock.acquire(blocking=False):
-                    log.write("[hub] waiting for an earlier job of this action "
-                              "to finish (GPU serialization)...\n")
+                    log.write(f"[hub] waiting for an earlier job holding '{lock_key}' "
+                              "to finish...\n")
                     log.flush()
                     lock.acquire()
                 try:
@@ -159,9 +190,14 @@ def start_job(project_name: str, action_name: str, argv_builder,
                 log.write(f"\n[hub] runner error: {e}\n")
         outputs = []
         status = "done" if rc == 0 else "failed"
+        proj = manifests.get(project_name) or {}
+        action = proj.get("actions", {}).get(action_name, {})
+        if action.get("noop_exit") is not None and rc == int(action["noop_exit"]):
+            # "nothing to do" (a poll found nothing): leave no trace in history, no ping
+            store.delete_job(job_id)
+            shutil.rmtree(job_dir, ignore_errors=True)
+            return
         try:
-            proj = manifests.get(project_name) or {}
-            action = proj.get("actions", {}).get(action_name, {})
             if rc == 0:
                 outputs = _collect_outputs(str(out_dir), proj, action)
         except Exception as e:
@@ -169,7 +205,8 @@ def start_job(project_name: str, action_name: str, argv_builder,
                 log.write(f"\n[hub] output collection error: {e}\n")
         store.finish_job(job_id, status, rc, time.time(), outputs)
         try:
-            notify.job_done(project_name, action_name, job_id, status, outputs)
+            notify.job_done(project_name, action_name, job_id, status, outputs,
+                            news=_news_from_log(log_path) if status == "done" else None)
         except Exception as e:
             with open(log_path, "a") as log:
                 log.write(f"\n[hub] notify error: {e}\n")

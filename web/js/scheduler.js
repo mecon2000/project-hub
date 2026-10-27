@@ -23,11 +23,15 @@ async function refresh(view, projects) {
   if (!scheds.length) { list.innerHTML = `<div class="empty">No schedules yet.</div>`; return; }
   list.innerHTML = "";
   for (const s of scheds) {
-    const row = el(`<div class="sched-row">
-      <div class="job-meta">
+    const meta = `<div class="job-meta">
         <div>${s.label || s.id} <span class="muted">(${s.project} · ${s.action})</span></div>
-        <div class="sub">cron: ${s.cron} · next: ${s.next_run || "?"}</div>
-      </div>
+        <div class="sub">cron: ${s.cron} · next: ${s.next_run || "?"}${s.readonly ? " · from the project manifest" : ""}</div>
+      </div>`;
+    if (s.readonly) {                       // declared in hub-project.yaml: change it there
+      list.appendChild(el(`<div class="sched-row">${meta}<span class="muted">${s.enabled ? "on" : "off"}</span></div>`));
+      continue;
+    }
+    const row = el(`<div class="sched-row">${meta}
       <label class="checkbox-row"><input type="checkbox" ${s.enabled ? "checked" : ""}></label>
       <button class="btn danger" style="padding:8px 12px">Del</button>
     </div>`);

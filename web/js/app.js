@@ -5,6 +5,7 @@ import { renderSchedules } from "./scheduler.js";
 import { renderDb } from "./dbview.js";
 import { renderQueue } from "./queue.js";
 import { renderLines } from "./lines.js";
+import { startLive } from "./live.js";
 
 export const state = {
   projects: [],
@@ -28,6 +29,7 @@ export function toast(msg, ms = 3000) {
 }
 
 export async function api(path, opts) {
+  if (opts && opts.method && opts.method !== "GET") state.lastWrite = Date.now();   // live.js: our own edit
   try {
     const res = await fetch(path, opts);
     if (!res.ok) {
@@ -102,6 +104,7 @@ async function loadProjects() {
   sel.innerHTML = state.projects
     .map((p) => `<option value="${p.name}">${p.label || p.name}</option>`)
     .join("");
+  if (state.project) sel.value = state.project;          // a live reload must not flip the picker
   sel.onchange = () => {
     state.project = sel.value;
     state.area = null;
@@ -246,4 +249,11 @@ window.addEventListener("hashchange", route);
     await loadProjects();
   } catch (e) { /* toast already shown */ }
   route();
+  startLive(async ({ rerender }) => {
+    await loadProjects();
+    if (!rerender) return;
+    const y = window.scrollY;
+    await route();
+    for (const ms of [0, 400, 1200]) setTimeout(() => window.scrollTo(0, y), ms);   // board images load late
+  });
 })();

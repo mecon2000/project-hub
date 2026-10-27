@@ -49,6 +49,7 @@ def projects():
                         for an, av in p.get("actions", {}).items()},
             "has_db_views": bool(p.get("db_views")),
             "custom_view": p.get("custom_view"),
+            "live": bool(p.get("live")),
             "manifest_path": p.get("manifest_path"),
         })
     return jsonify(out)

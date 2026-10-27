@@ -3,6 +3,11 @@
 Every schedule runs through the same job runner, so scheduled runs show up in
 job history and notify exactly like manual ones. Also hosts the built-in
 trash-purge job (>30 days, every project).
+
+Manifests may also declare `schedules: [{id, cron, action, label?, enabled?}]`.
+Those live in the manifest (not the table), are re-synced every minute so a
+pulled manifest change takes effect without a restart, are shown read-only in
+the Schedules tab, and never overlap a run of the same action still in flight.
 """
 import glob
 import os
@@ -17,6 +22,7 @@ from hub import manifests
 from hub.jobs import runner, store
 
 _sched: BackgroundScheduler | None = None
+_mf_cron: dict[str, str] = {}      # manifest schedule id -> cron it was registered with
 
 
 def _run_schedule(sid: str) -> None:
@@ -40,6 +46,53 @@ def _run_schedule(sid: str) -> None:
         lambda out, srcs: actions_mod.build_argv(proj, s["action"], srcs,
                                                  s.get("params", {}), s.get("flags", []), out),
         sources)
+
+
+def _run_manifest_schedule(project: str, sid: str) -> None:
+    proj = manifests.get(project) or {}
+    s = next((x for x in proj.get("schedules", []) if str(x.get("id")) == sid), None)
+    if not s or s.get("enabled", True) is False or runner.is_active(project, s["action"]):
+        return
+    try:
+        actions_mod.build_argv(proj, s["action"], [], s.get("params", {}), s.get("flags", []), "/tmp")
+    except actions_mod.ActionError as e:
+        print(f"[scheduler] {project}/{sid}: invalid action config: {e}")
+        return
+    runner.start_job(project, s["action"],
+                     lambda out, srcs: actions_mod.build_argv(proj, s["action"], srcs, s.get("params", {}),
+                                                              s.get("flags", []), out), [])
+
+
+def _manifest_schedules() -> list[dict]:
+    out = []
+    for name, proj in sorted(manifests.all_projects().items()):
+        for s in proj.get("schedules", []) or []:
+            if isinstance(s, dict) and s.get("id") and s.get("cron") and s.get("action"):
+                out.append({**s, "id": f"mf:{name}:{s['id']}", "project": name,
+                            "local_id": str(s["id"]), "readonly": True,
+                            "enabled": 1 if s.get("enabled", True) is not False else 0})
+    return out
+
+
+def _sync_manifest_schedules() -> None:
+    wanted = {}
+    for s in _manifest_schedules():
+        if s["enabled"]:
+            wanted[s["id"]] = s
+    for job in _sched.get_jobs():
+        if job.id.startswith("mf:") and job.id not in wanted:
+            _sched.remove_job(job.id)
+    for jid, s in wanted.items():
+        try:
+            trig = CronTrigger.from_crontab(s["cron"])
+        except Exception as e:
+            print(f"[scheduler] bad manifest schedule {jid}: {e}")
+            continue
+        if _sched.get_job(jid) and _mf_cron.get(jid) == s["cron"]:
+            continue                                    # unchanged: keep its next_run
+        _sched.add_job(_run_manifest_schedule, trig, args=[s["project"], s["local_id"]], id=jid,
+                       replace_existing=True, misfire_grace_time=60)
+        _mf_cron[jid] = s["cron"]
 
 
 def _purge_trash() -> None:
@@ -74,6 +127,9 @@ def start() -> None:
     _sched.start()
     _sched.add_job(_purge_trash, CronTrigger.from_crontab("30 4 * * *"),
                    id="_purge_trash", replace_existing=True)
+    _sync_manifest_schedules()
+    _sched.add_job(_sync_manifest_schedules, "interval", seconds=60, id="_sync_manifest",
+                   replace_existing=True)
     for s in store.list_schedules():
         if s.get("enabled", 1):
             try:
@@ -83,6 +139,8 @@ def start() -> None:
 
 
 def upsert(s: dict) -> dict:
+    if str(s.get("id", "")).startswith("mf:"):
+        raise ValueError("this schedule comes from the project manifest - change it there")
     s.setdefault("id", "sch-" + uuid.uuid4().hex[:8])
     CronTrigger.from_crontab(s["cron"])          # validate early
     store.upsert_schedule(s)
@@ -94,6 +152,8 @@ def upsert(s: dict) -> dict:
 
 
 def delete(sid: str) -> None:
+    if sid.startswith("mf:"):
+        return                                      # manifest-owned
     store.delete_schedule(sid)
     if _sched and _sched.get_job(sid):
         _sched.remove_job(sid)
@@ -101,7 +161,7 @@ def delete(sid: str) -> None:
 
 def list_all() -> list[dict]:
     out = []
-    for s in store.list_schedules():
+    for s in store.list_schedules() + _manifest_schedules():
         job = _sched.get_job(s["id"]) if _sched else None
         s["next_run"] = job.next_run_time.isoformat() if job and job.next_run_time else None
         out.append(s)
