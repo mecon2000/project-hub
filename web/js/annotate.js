@@ -4,6 +4,7 @@ import { api, el, toast, setHash } from "./app.js";
 // group dir = one piece with several images). Each card: image switcher, ⓘ metadata
 // (from <group>/meta.json), verdict chips, and Notes → Take One's review-room flow on a still:
 // tap the picture to pin, write, Save note (snapshot with the pin drawn in); ✓ done / ✕ delete.
+// `more_like_this: true` adds a "＋ More like this" toggle: a request for a few new variations of that item.
 // "Send notes" stamps them as sent and runs the area's submit_action.
 
 const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
@@ -46,8 +47,9 @@ export async function renderBoard(host, project, area) {
   const tally = () => {
     const kept = {}, open = items.filter((it) => unsent(it.notes)).length;
     verdicts.forEach((v) => { kept[v] = items.filter((it) => it.notes && it.notes.verdict === v).length; });
+    const more = items.filter((it) => it.notes && it.notes.more).length;
     bar.querySelector("#annTally").textContent =
-      verdicts.map((v) => `${v} ${kept[v]}`).join(" · ") + ` · ${open} unsent`;
+      verdicts.map((v) => `${v} ${kept[v]}`).join(" · ") + (cfg.more_like_this ? ` · more ${more}` : "") + ` · ${open} unsent`;
     bar.querySelector("#annSend").disabled = !open;
   };
 
@@ -75,6 +77,8 @@ export async function renderBoard(host, project, area) {
         <div class="ann-actions">
           ${verdicts.map((v) => `<button class="ann-v ${n.verdict === v ? "on" : ""}" data-v="${esc(v)}">${esc(v)}</button>`).join("")}
           <button class="ann-edit">✎ Notes${unsent(n) ? " •" : ""}</button>
+          ${cfg.more_like_this ? `<button class="ann-more ${n.more ? "on" : ""}" aria-pressed="${!!n.more}"
+            title="Ask for a few new variations of this one">${n.more ? "✓ More like this" : "＋ More like this"}</button>` : ""}
         </div>
       </div>
     </article>`);
@@ -104,6 +108,16 @@ export async function renderBoard(host, project, area) {
         it.notes = r.notes; redraw(i); tally();
       } catch (e) { /* toasted */ }
     }));
+    card.querySelector(".ann-more")?.addEventListener("click", async () => {
+      try {
+        const r = await api(`/api/p/${project.name}/notes`, {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ area, path: it.path, op: "more", more: !n.more }),
+        });
+        it.notes = r.notes; redraw(i); tally();
+        toast(r.notes.more ? "Asked for more like this — goes out with Send notes" : "Request removed");
+      } catch (e) { /* toasted */ }
+    });
     card.querySelector(".ann-edit").addEventListener("click", () =>
       openEditor(project, area, it, imgs, cur, title, () => { redraw(i); tally(); }));
     img.addEventListener("click", () =>

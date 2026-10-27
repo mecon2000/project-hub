@@ -33,6 +33,8 @@
 .ann-preview { font-size: 13px; color: var(--muted); overflow-wrap: anywhere; }
 .ann-pinct { margin-right: 6px; color: var(--text); }
 .ann-actions { display: grid; grid-template-columns: 1fr 1fr 1.2fr; gap: 6px; }
+.ann-more { grid-column: 1 / -1; text-transform: none !important; }
+.ann-more.on { background: color-mix(in srgb, var(--accent) 18%, transparent) !important; border-color: var(--accent) !important; color: var(--accent) !important; }
 .ann-actions button { padding: 10px 6px; border-radius: 8px; border: 1px solid var(--border); background: transparent; color: var(--text); font-size: 15px; text-transform: capitalize; }
 .ann-v.on[data-v="keep"], .ann-v.on:first-child { background: var(--ok); color: #031; border-color: var(--ok); }
 .ann-v.on[data-v="drop"] { background: var(--danger); color: #200; border-color: var(--danger); }

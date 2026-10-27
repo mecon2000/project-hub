@@ -158,6 +158,7 @@ areas:
     sort: name              # numbered folders in order instead of newest first
     annotate:
       verdicts: [keep, drop]
+      more_like_this: true    # "＋ More like this" toggle per item → notes.json "more": true
       submit_action: send-notes
       hint: "shown with the Send bar"
 ```
