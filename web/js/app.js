@@ -159,11 +159,12 @@ async function renderHome() {
     grid.appendChild(card);
     const chipRow = card.querySelector("[data-areas]");
     for (const a of areaNames) {
-      const chip = el(`<span class="chip">${a}…</span>`);
+      const lab = (p.areas[a] && p.areas[a].label) || a;
+      const chip = el(`<span class="chip">${lab}…</span>`);
       chipRow.appendChild(chip);
       api(`/api/p/${p.name}/media?area=${encodeURIComponent(a)}&offset=0&limit=1`)
-        .then((r) => { chip.textContent = `${a} (${r.total})`; })
-        .catch(() => { chip.textContent = a; });
+        .then((r) => { chip.textContent = `${lab} (${r.total})`; })
+        .catch(() => { chip.textContent = lab; });
     }
   }
 }
