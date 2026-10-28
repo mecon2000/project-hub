@@ -27,7 +27,8 @@ def projects():
         out.append({
             "name": name,
             "label": p.get("label", name),
-            "areas": {a: {"media": v.get("media", []),
+            "areas": {a: {"label": scanner.label_of(v, a),
+                          "media": v.get("media", []),
                           "hidden": v.get("hidden_by_default", False),
                           "triage": v.get("triage", False),
                           "link_template": v.get("link_template"),

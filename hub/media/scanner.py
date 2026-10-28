@@ -40,6 +40,8 @@ def _roots(area: dict) -> list:
         return []
     if area.get("latest"):
         subs = subs[-1:]
+    elif area.get("skip_latest"):             # e.g. favourites: older rounds only, the newest is still in review
+        subs = subs[:-1]
     return [os.path.join(base, d) for d in subs]
 
 
@@ -53,10 +55,13 @@ def _verdict_ok(area: dict, path: str) -> bool:
     return (not vin or v in vin) and (not vnot or v not in vnot)
 
 
-def latest_root(area: dict) -> str | None:
-    """the directory a `latest: true` area currently shows (for pings and page titles)"""
-    r = _roots(area)
-    return r[-1] if r else None
+def label_of(area: dict, key: str) -> str:
+    """the chip text: `label`, where "{latest}" is the newest included folder ("round-8" -> "round 8")"""
+    lab = area.get("label") or key
+    if "{latest}" in lab:
+        r = _roots({**area, "latest": True, "skip_latest": False})
+        lab = lab.replace("{latest}", os.path.basename(r[-1]).replace("-", " ") if r else key)
+    return lab
 
 
 def _group_by_dir(items: list, base: str, depth: int = 1) -> list:

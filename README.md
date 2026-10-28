@@ -173,11 +173,12 @@ Areas can also span several folders and filter by verdict (still one real locati
     dir: .                     # the content root
     include: "round-*"         # show these sub-folders (each holds sets; group_by dir groups one level deeper)
     latest: true               # ...only the last of them in natural order
-    verdicts_not: [keep]
-  favourites:                  # every kept set from every round
+    label: "{latest}"          # chip says "round 8" ("{latest}" = newest included folder, "-" -> " ")
+  favourites:                  # every kept set from the older rounds (the newest stays in review)
     dir: .
     include: "round-*"
-    verdicts_in: [keep]
+    skip_latest: true
+    verdicts_in: [keep]        # (verdicts_not: [...] filters the other way)
 ```
 
 ## 8. Hands-off updates (`schedules:`, `noop_exit`, `live:`)
