@@ -144,7 +144,8 @@ flowchart LR
 Take One's review room, for stills: an area with `annotate:` shows a board instead of the
 thumb grid. One card per item (a `group_by: dir` folder = one piece with several images),
 an ⓘ panel from the folder's `meta.json`, verdict chips, and **✎ Notes**: tap the picture to
-pin, write, Save note. Each note is saved at once with a snapshot (pin drawn in) and can be
+pin, write, Save note (mouse wheel or pinch zooms, drag pans, double-click fits; zoomed in, the
+snapshot is the part on screen). Each note is saved at once with a snapshot (pin drawn in) and can be
 marked ✓ done when the next round answers it. Notes live next to the item
 (`<folder>/notes.json`, snapshots in `<folder>/_notes/`), so a repo-backed area carries them
 in git. A verdict a tool set (`"verdict_by": "auto"` in notes.json) shows as "drop · auto" until you click. **Send notes** stamps them as sent and runs the area's `submit_action`

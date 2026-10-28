@@ -1,5 +1,6 @@
 import { state, api, el, toast, humanSize, relTime, setHash } from "./app.js";
 import { attachVideo } from "./viewer.js";
+import { attachZoom } from "./zoom.js";
 import { openCompare } from "./compare.js";
 import { reviewEnabled, attachReview } from "./review.js";
 import { attachHoldReveal } from "./holdreveal.js";
@@ -269,7 +270,7 @@ function slideShow(delta) {
     if (media) attachVideo(media, slide.frames[slide.i], { autoplay: true });
   }
   const img = document.getElementById("lbImg");
-  if (img) img.src = `/file?path=${encodeURIComponent(slide.frames[slide.i])}`;
+  if (img) { img.src = `/file?path=${encodeURIComponent(slide.frames[slide.i])}`; lbZoom && lbZoom.reset(); }
   const pos = document.getElementById("lbSlidePos");
   if (pos) pos.textContent = String(slide.i + 1);
 }
@@ -304,6 +305,7 @@ function nav(project, delta) {
 }
 
 let touchStartX = null;
+let lbZoom = null;              // wheel / pinch zoom on the lightbox picture
 
 // Generic per-area deep link (manifest: areas.<a>.link_template {url, label};
 // {path} in url is replaced with the item's encoded absolute path).
@@ -503,9 +505,11 @@ function renderLightbox(project) {
   });
 
   const media = lb.querySelector(".lightbox-media");
-  media.addEventListener("touchstart", (e) => { touchStartX = e.touches[0].clientX; }, { passive: true });
+  const lbImg = document.getElementById("lbImg");
+  lbZoom = lbImg ? attachZoom(media, lbImg) : null;
+  media.addEventListener("touchstart", (e) => { touchStartX = e.touches.length === 1 ? e.touches[0].clientX : null; }, { passive: true });
   media.addEventListener("touchend", (e) => {
-    if (touchStartX == null) return;
+    if (touchStartX == null || (lbZoom && lbZoom.zoom > 1)) return;   // zoomed in: a drag pans instead
     const dx = e.changedTouches[0].clientX - touchStartX;
     if (Math.abs(dx) > 50) {
       const d = dx < 0 ? 1 : -1;

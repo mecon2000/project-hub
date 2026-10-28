@@ -1,4 +1,5 @@
 import { api, el, toast, setHash } from "./app.js";
+import { attachZoom } from "./zoom.js";
 
 // Review board for areas whose manifest sets `annotate:`. One card per item (usually a
 // group dir = one piece with several images). Each card: image switcher, ⓘ metadata
@@ -170,7 +171,7 @@ function openEditor(project, area, it, imgs, start, title, onChanged) {
       <section class="ann-ed-left">
         ${imgs.length > 1 ? `<div class="ann-views ann-ed-views"></div>` : ""}
         <div class="ann-stage"><div class="ann-frame"><img alt=""><div class="ann-pins"></div></div></div>
-        <div class="ann-ed-hint muted">Tap the picture to pin a note to that spot.</div>
+        <div class="ann-ed-hint muted">Tap the picture to pin a note. Scroll to zoom, drag to move, double-click to fit.</div>
       </section>
       <aside class="ann-ed-right">
         <div class="ann-compose">
@@ -190,6 +191,7 @@ function openEditor(project, area, it, imgs, start, title, onChanged) {
   const img = ov.querySelector(".ann-frame img"), layer = ov.querySelector(".ann-pins");
   const views = ov.querySelector(".ann-ed-views"), list = ov.querySelector(".ann-list");
   const where = ov.querySelector(".ann-where"), text = ov.querySelector("#annText");
+  const zoom = attachZoom(ov.querySelector(".ann-stage"), ov.querySelector(".ann-frame"));
 
   const setWhere = () => {
     where.textContent = mode === "whole" ? "Note on the whole piece"
@@ -240,7 +242,7 @@ function openEditor(project, area, it, imgs, start, title, onChanged) {
   };
   const draw = () => {
     const src = `/file?path=${encodeURIComponent(cur)}`;
-    if (img.getAttribute("src") !== src) img.setAttribute("src", src);
+    if (img.getAttribute("src") !== src) { img.setAttribute("src", src); zoom.reset(); }
     drawViews(); drawPins(); drawList();
   };
   const send = async (body) => {
@@ -254,13 +256,16 @@ function openEditor(project, area, it, imgs, start, title, onChanged) {
       return true;
     } catch (e) { return false; }
   };
-  // snapshot of the picture with the pin drawn in, so a note reads on its own later
+  // snapshot of the picture with the pin drawn in, so a note reads on its own later; when zoomed in,
+  // just the part on screen (what the note is about), not the whole picture shrunk
   const snapshot = () => {
     try {
-      const k = Math.min(1, 900 / img.naturalWidth), W = Math.round(img.naturalWidth * k), H = Math.round(img.naturalHeight * k);
+      const v = zoom.zoom > 1 ? zoom.visible(img) : { x: 0, y: 0, w: 1, h: 1 };
+      const sx = v.x * img.naturalWidth, sy = v.y * img.naturalHeight, sw = v.w * img.naturalWidth, sh = v.h * img.naturalHeight;
+      const k = Math.min(1, 900 / sw), W = Math.round(sw * k), H = Math.round(sh * k);
       const c = document.createElement("canvas"); c.width = W; c.height = H;
-      const g = c.getContext("2d"); g.drawImage(img, 0, 0, W, H);
-      if (pin) { g.lineWidth = 5; g.strokeStyle = "#fff"; g.fillStyle = "#d97757"; g.beginPath(); g.arc(pin.x * W, pin.y * H, 15, 0, 7); g.fill(); g.stroke(); }
+      const g = c.getContext("2d"); g.drawImage(img, sx, sy, sw, sh, 0, 0, W, H);
+      if (pin) { g.lineWidth = 5; g.strokeStyle = "#fff"; g.fillStyle = "#d97757"; g.beginPath(); g.arc((pin.x - v.x) / v.w * W, (pin.y - v.y) / v.h * H, 15, 0, 7); g.fill(); g.stroke(); }
       return c.toDataURL("image/jpeg", 0.85);
     } catch (e) { return null; }
   };

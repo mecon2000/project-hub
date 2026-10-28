@@ -67,7 +67,9 @@ body.ann-lock { overflow: hidden; }
   background: var(--to); box-shadow: 0 0 0 2px rgba(0,0,0,.55); color: #fff; font: 700 11px/20px system-ui, sans-serif; text-align: center; }
 .ann-pin.old { opacity: .85; }
 .ann-pin.done { background: var(--ok); }
-.ann-pin.focus { transform: scale(1.25); opacity: 1; }
+.ann-pin { transform: scale(calc(1 / var(--z, 1))); }   /* pins keep their size when zoomed in */
+.ann-pin.focus { transform: scale(calc(1.25 / var(--z, 1))); opacity: 1; }
+.ann-stage.zoomed .ann-frame img { touch-action: none; }
 .ann-ed-hint { font-size: 13px; }
 .ann-compose { padding: 12px; border-bottom: 1px solid var(--border); display: grid; gap: 8px; }
 .ann-where { color: var(--to); font-size: 14px; min-height: 20px; }
