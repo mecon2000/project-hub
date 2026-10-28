@@ -38,7 +38,8 @@ export function renderGallery(view, project, opts = {}) {
   const chipRow = document.getElementById("areaChips");
   const chips = {};
   function chipFor(a) {
-    const c = el(`<button class="chip ${a === curArea ? "active" : ""}">${(project.areas[a] && project.areas[a].label) || a}</button>`);
+    const lab = (project.areas[a] && project.areas[a].label) || a;
+    const c = el(`<button class="chip ${a === curArea ? "active" : ""}">${lab}</button>`);
     chips[a] = c;
     c.addEventListener("click", () => {
       curArea = a;
@@ -49,12 +50,14 @@ export function renderGallery(view, project, opts = {}) {
     });
     // real file count, fetched lazily
     api(`/api/p/${project.name}/media?area=${encodeURIComponent(a)}&offset=0&limit=1`)
-      .then((r) => { c.textContent = `${a} (${r.total})`; })
+      .then((r) => { c.textContent = `${lab} (${r.total})`; })
       .catch(() => {});
     return c;
   }
   visible.forEach((a) => chipRow.appendChild(chipFor(a)));
-  updateChipCount = (a, n) => { if (chips[a]) chips[a].textContent = `${a} (${n})`; };
+  updateChipCount = (a, n) => {
+    if (chips[a]) chips[a].textContent = `${(project.areas[a] && project.areas[a].label) || a} (${n})`;
+  };
   if (hidden.length) {
     let expanded = false;
     const more = el(`<button class="chip more">more…</button>`);
