@@ -78,8 +78,9 @@ def _load_one(path: str) -> dict | None:
     root = _expand(content.get("root", "")) if content.get("root") else ""
     for area in content.setdefault("areas", {}).values():
         d = area.get("dir", "")
-        area["abs_dir"] = _expand(d) if os.path.isabs(os.path.expanduser(d)) \
-            else os.path.join(root, d)
+        # real, normalised path: `dir: .` must not leave a "/." that every boundary check then misses
+        area["abs_dir"] = os.path.realpath(_expand(d) if os.path.isabs(os.path.expanduser(d))
+                                           else os.path.join(root, d))
         os.makedirs(area["abs_dir"], exist_ok=True)
     # implicit trash area for delete=move-to-trash
     if root:
