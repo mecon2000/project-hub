@@ -165,6 +165,21 @@ areas:
       hint: "shown with the Send bar"
 ```
 
+Areas can also span several folders and filter by verdict (still one real location per file):
+
+```yaml
+  latest:                      # the newest round only, minus what was kept
+    label: Latest round        # chip text (default: the area key)
+    dir: .                     # the content root
+    include: "round-*"         # show these sub-folders (each holds sets; group_by dir groups one level deeper)
+    latest: true               # ...only the last of them in natural order
+    verdicts_not: [keep]
+  favourites:                  # every kept set from every round
+    dir: .
+    include: "round-*"
+    verdicts_in: [keep]
+```
+
 ## 8. Hands-off updates (`schedules:`, `noop_exit`, `live:`)
 
 For projects that something else (Claude in the cloud, a CI) pushes to:

@@ -38,7 +38,7 @@ export function renderGallery(view, project, opts = {}) {
   const chipRow = document.getElementById("areaChips");
   const chips = {};
   function chipFor(a) {
-    const c = el(`<button class="chip ${a === curArea ? "active" : ""}">${a}</button>`);
+    const c = el(`<button class="chip ${a === curArea ? "active" : ""}">${(project.areas[a] && project.areas[a].label) || a}</button>`);
     chips[a] = c;
     c.addEventListener("click", () => {
       curArea = a;
